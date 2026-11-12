@@ -128,10 +128,17 @@ export class ModuleManager {
    * Allows a module to be resolved from a button customId prefix that differs from its name.
    * e.g. { 'button-roles' → 'reaction-roles', 'button-roles-select' → 'reaction-roles' }
    */
-  private buttonPrefixAliases: Map<string, string> = new Map([
+  /* private buttonPrefixAliases: Map<string, string> = new Map([
     ["button-roles", "reaction-roles"],
     ["button-roles-select", "reaction-roles"],
-  ]);
+  ]); */
+
+private buttonPrefixAliases: Map<string, string> = new Map([
+  ["rr", "reaction-roles"],
+  ["button-roles", "reaction-roles"],
+  ["button-roles-select", "reaction-roles"],
+]);
+
 
   /** Public read-only access to all registered modules (keyed by module name). */
   public getRegisteredModules(): ReadonlyMap<string, BotModule> {
@@ -334,7 +341,7 @@ export class ModuleManager {
    * the module from the customId prefix (`moduleName:...`), check global
    * enablement, run the module's handler.
    */
-  private async dispatchComponent(
+  /* private async dispatchComponent(
     interaction:
       | ButtonInteraction
       | StringSelectMenuInteraction
@@ -374,10 +381,115 @@ export class ModuleManager {
           });
         }
       } catch {
-        /* ignore */
+        
       }
     }
-  }
+  } */ // Old Shi
+
+
+    private async dispatchComponent(
+      interaction:
+        | ButtonInteraction
+        | StringSelectMenuInteraction
+        | RoleSelectMenuInteraction
+        | ModalSubmitInteraction,
+      handlerKey:
+        | "handleButton"
+        | "handleSelectMenu"
+        | "handleRoleSelectMenu"
+        | "handleModal",
+      label: string,
+    ): Promise<void> {
+      const prefix = interaction.customId.split(":")[0]
+        ?.toLowerCase();
+
+      const resolvedName =
+        this.buttonPrefixAliases.get(prefix ?? "") ??
+        prefix;
+
+      console.log("[MODUS COMPONENT]", {
+        type: label,
+        customId: interaction.customId,
+        resolvedName,
+      });
+
+      const module = resolvedName
+        ? this.uniqueModules.get(resolvedName)
+        : undefined;
+
+      const handler = module?.[handlerKey];
+
+      
+      if (!module || !handler) {
+        // Only handle missing-handler errors for Reaction Roles.
+        // Leave other MODUS modules unaffected.
+        if (resolvedName !== "reaction-roles") return;
+
+        // Reaction Roles dropdowns have their own event listener.
+        // Prevent duplicate interaction responses.
+        if (handlerKey === "handleSelectMenu") return;
+
+        console.error("[MODUS] Missing component handler", {
+          resolvedName,
+          handlerKey,
+          customId: interaction.customId,
+        });
+
+        try {
+          if (!interaction.deferred && !interaction.replied) {
+            await interaction.reply({
+              content:
+                "❌ This role button is not configured correctly. Please contact staff.",
+              flags: MessageFlags.Ephemeral,
+            });
+          }
+        } catch (error) {
+          console.error(
+            "[MODUS] Failed to respond to interaction:",
+            error,
+          );
+        }
+
+        return;
+      }
+
+
+      if (!this.enabledModules.has(module.name.toLowerCase())) {
+        await interaction.reply({
+          content: "This module is currently disabled.",
+          flags: MessageFlags.Ephemeral,
+        }).catch(console.error);
+        return;
+      }
+
+      try {
+        await handler(interaction as any, this);
+      } catch (error) {
+        console.error("[MODUS] Component handler failed", {
+          customId: interaction.customId,
+          error,
+        });
+
+        const content =
+          "An error occurred while processing this action.";
+
+        try {
+          if (interaction.deferred) {
+            await interaction.editReply({ content });
+          } else if (!interaction.replied) {
+            await interaction.reply({
+              content,
+              flags: MessageFlags.Ephemeral,
+            });
+          }
+        } catch (replyError) {
+          console.error(
+            "[MODUS] Failed to report interaction error",
+            replyError,
+          );
+        }
+      }
+    }
 
   public async handleInteraction(interaction: Interaction) {
     // Helper: resolve module from command name

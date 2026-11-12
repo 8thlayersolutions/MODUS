@@ -65,7 +65,8 @@ function buildPanelPayload(panel: ButtonRolesPanel) {
         color: color ?? 0x5865f2,
         selectMenus: [
           {
-            customId: `rr:select:${panel.id}`,
+            // customId: `rr:select:${panel.id}`, -- Old
+            customId: `${SELECT_PREFIX}:${panel.id}`,
             placeholder: "Select roles to toggle…",
             options,
           },
@@ -82,7 +83,8 @@ function buildPanelPayload(panel: ButtonRolesPanel) {
       const row = new ActionRowBuilder<ButtonBuilder>();
       for (const entry of chunk) {
         const btn = new ButtonBuilder()
-          .setCustomId(`rr:btn:${panel.id}:${entry.id}`)
+          // .setCustomId(`rr:btn:${panel.id}:${entry.id}`) -- Old
+          .setCustomId(`${BTN_PREFIX}:${panel.id}:${entry.id}`)
           .setLabel(entry.label)
           .setStyle(STYLE_MAP[entry.style] ?? ButtonStyle.Primary);
         if (entry.emoji) btn.setEmoji(entry.emoji);
@@ -151,9 +153,21 @@ async function toggleRole(
       await member.roles.add(roleId, "Button Role toggle");
       return `➕ Added the **${label}** role.`;
     }
-  } catch {
+  /* } catch {
     return `❌ I couldn't update your **${label}** role — check my permissions.`;
-  }
+  } */
+
+  } catch (error) {
+    console.error("[Reaction Roles] Role assignment failed", {
+      guildId,
+      roleId,
+      userId: interaction.user.id,
+      error,
+    });
+
+    return `❌ Could not update **${label}**. Please contact staff.`;
+}
+
 }
 
 // ── Module Definition ──────────────────────────────────────────────────────
@@ -301,7 +315,7 @@ const buttonRolesModule: BotModule = {
   },
 
   // ── Button handler (buttons type panels) ─────────────────────────────
-  handleButton: async (
+  /* handleButton: async (
     interaction: ButtonInteraction,
     moduleManager: ModuleManager,
   ) => {
@@ -345,12 +359,144 @@ const buttonRolesModule: BotModule = {
       entry.label,
     );
     await interaction.reply({ content: msg, flags: [MessageFlags.Ephemeral] });
+  }, */ /* Old */
+
+  handleButton: async (
+    interaction: ButtonInteraction,
+    moduleManager: ModuleManager,
+  ) => {
+    const guildId = interaction.guildId;
+    if (!guildId) return;
+
+    // Acknowledge before database or Discord API calls.
+    await interaction.deferReply({
+      flags: MessageFlags.Ephemeral,
+    });
+
+    try {
+      const parts = interaction.customId.split(":");
+      let panelId: string | undefined;
+      let entryId: string | undefined;
+
+      // Legacy button:
+      // rr:btn:panelId:entryId
+      if (
+        parts[0] === "rr" &&
+        parts[1] === "btn" &&
+        parts.length === 4
+      ) {
+        panelId = parts[2];
+        entryId = parts[3];
+      }
+
+      // Updated button:
+      // button-roles:panelId:entryId
+      else if (
+        parts[0] === BTN_PREFIX &&
+        parts.length === 3
+      ) {
+        panelId = parts[1];
+        entryId = parts[2];
+      }
+
+      if (!panelId || !entryId) {
+        await interaction.editReply(
+          "❌ Invalid role button configuration.",
+        );
+        return;
+      }
+
+      const db = moduleManager.databaseService;
+
+      const isEnabled = await db.isModuleEnabled(
+        guildId,
+        "reaction-roles",
+      );
+
+      if (!isEnabled) {
+        await interaction.editReply(
+          "❌ Reaction Roles is disabled.",
+        );
+        return;
+      }
+
+      const raw = await db.getModuleSettings(
+        guildId,
+        "reaction-roles",
+      );
+
+      const settings = parseSettings(
+        ButtonRolesSettingsSchema,
+        raw,
+        "reaction-roles",
+        guildId,
+      );
+
+      if (!settings) {
+        await interaction.editReply(
+          "❌ Could not load role panel settings.",
+        );
+        return;
+      }
+
+      const panel = settings.panels.find(
+        p => p.id === panelId,
+      );
+
+      if (!panel) {
+        await interaction.editReply(
+          "❌ This role panel no longer exists.",
+        );
+        return;
+      }
+
+      const entry = panel.entries.find(
+        e => e.id === entryId,
+      );
+
+      if (!entry) {
+        await interaction.editReply(
+          "❌ This role option no longer exists.",
+        );
+        return;
+      }
+
+      console.log("[Reaction Roles] Processing", {
+        guildId,
+        panelId,
+        entryId,
+        roleId: entry.roleId,
+      });
+
+      const result = await toggleRole(
+        interaction,
+        guildId,
+        entry.roleId,
+        entry.label,
+      );
+
+      await interaction.editReply(result);
+
+      console.log(
+        "[Reaction Roles] Result:",
+        result,
+      );
+    } catch (error) {
+      console.error(
+        "[Reaction Roles] Button failed:",
+        error,
+      );
+
+      await interaction.editReply(
+        "❌ Unable to update your role. Contact staff.",
+      ).catch(console.error);
+    }
   },
 };
 
-// ── Event Registration (dropdown select-menu handler) ─────────────────────
+// ── Event Registration (dropdown select-menu handler) old ─────────────────────
 
-export function registerReactionRolesEvents(moduleManager: ModuleManager) {
+/* export function registerReactionRolesEvents(moduleManager: ModuleManager) {
   const client = (moduleManager as any)["client"] as any;
 
   client.on(Events.InteractionCreate, async (interaction: Interaction) => {
@@ -414,6 +560,151 @@ export function registerReactionRolesEvents(moduleManager: ModuleManager) {
 
   moduleManager.logger.info(
     "Button-roles dropdown event listener registered.",
+    undefined,
+    "reaction-roles",
+  );
+} */
+
+export function registerReactionRolesEvents(
+  moduleManager: ModuleManager,
+) {
+  const client = moduleManager.client;
+
+  client.on(
+    Events.InteractionCreate,
+    async (interaction: Interaction) => {
+      if (!interaction.isStringSelectMenu()) return;
+
+      const parts = interaction.customId.split(":");
+      let panelId: string | undefined;
+
+      // Legacy dropdown: rr:select:panelId
+      if (
+        parts[0] === "rr" &&
+        parts[1] === "select" &&
+        parts.length === 3
+      ) {
+        panelId = parts[2];
+      }
+
+      // Updated dropdown: button-roles-select:panelId
+      else if (
+        parts[0] === SELECT_PREFIX &&
+        parts.length === 2
+      ) {
+        panelId = parts[1];
+      }
+
+      if (!panelId || !interaction.guildId) return;
+
+      await interaction.deferReply({
+        flags: MessageFlags.Ephemeral,
+      });
+
+      try {
+        const guildId = interaction.guildId;
+        const db = moduleManager.databaseService;
+
+        const enabled = await db.isModuleEnabled(
+          guildId,
+          "reaction-roles",
+        );
+
+        if (!enabled) {
+          await interaction.editReply(
+            "❌ Reaction Roles is disabled.",
+          );
+          return;
+        }
+
+        const raw = await db.getModuleSettings(
+          guildId,
+          "reaction-roles",
+        );
+
+        const settings = parseSettings(
+          ButtonRolesSettingsSchema,
+          raw,
+          "reaction-roles",
+          guildId,
+        );
+
+        const panel = settings?.panels.find(
+          p => p.id === panelId,
+        );
+
+        if (!panel) {
+          await interaction.editReply(
+            "❌ Role panel not found.",
+          );
+          return;
+        }
+
+        const member = await interaction.guild
+          ?.members.fetch(interaction.user.id);
+
+        if (!member) {
+          await interaction.editReply(
+            "❌ Could not load your server profile.",
+          );
+          return;
+        }
+
+        const selectedIds = new Set(
+          interaction.values,
+        );
+
+        const results: string[] = [];
+
+        for (const entry of panel.entries) {
+          try {
+            const selected = selectedIds.has(entry.id);
+            const hasRole = member.roles.cache.has(
+              entry.roleId,
+            );
+
+            if (selected && !hasRole) {
+              await member.roles.add(
+                entry.roleId,
+                "Reaction Roles dropdown",
+              );
+              results.push(`➕ ${entry.label}`);
+            } else if (!selected && hasRole) {
+              await member.roles.remove(
+                entry.roleId,
+                "Reaction Roles dropdown",
+              );
+              results.push(`➖ ${entry.label}`);
+            }
+          } catch (error) {
+            console.error(
+              "[Reaction Roles] Dropdown role error",
+              error,
+            );
+            results.push(`❌ ${entry.label}`);
+          }
+        }
+
+        await interaction.editReply(
+          results.length
+            ? results.join("\n")
+            : "No role changes needed.",
+        );
+      } catch (error) {
+        console.error(
+          "[Reaction Roles] Dropdown failed:",
+          error,
+        );
+
+        await interaction.editReply(
+          "❌ Unable to update your roles.",
+        ).catch(console.error);
+      }
+    },
+  );
+
+  moduleManager.logger.info(
+    "Reaction Roles dropdown listener registered.",
     undefined,
     "reaction-roles",
   );
