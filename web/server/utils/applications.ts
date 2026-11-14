@@ -112,6 +112,10 @@ export async function applicationReviewerIdentity(event: H3Event, guildId: strin
   } catch (err: any) {
     if (err?.statusCode !== 403) throw err;
   }
+  if (!isGuildManager) {
+    // Reviewer grants are only for current members of the Discord server.
+    await requireApplicationMember(event, guildId);
+  }
   const roleIds = isGuildManager ? [] : await fetchGuildMemberRoleIds(guildId, identity.userId);
   return { ...identity, isGuildManager, roleIds };
 }
