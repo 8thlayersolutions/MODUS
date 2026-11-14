@@ -116,8 +116,8 @@ export class ApplicationRepository {
         eq(applicationSubmissions.formId, form.id),
         eq(applicationSubmissions.applicantId, input.applicantId),
       )).orderBy(desc(applicationSubmissions.createdAt)).limit(1);
-      if (latest && ["pending", "in_review"].includes(latest.status)) {
-        throw new ApplicationError("You already have an application awaiting a decision.");
+      if (latest && ["pending", "in_review", "approved"].includes(latest.status)) {
+        throw new ApplicationError(latest.status === "approved" ? "Your application was already approved." : "You already have an application awaiting a decision.");
       }
       if (latest?.status === "denied" && Date.now() - latest.createdAt.getTime() <
           form.cooldownDays * 86_400_000) {

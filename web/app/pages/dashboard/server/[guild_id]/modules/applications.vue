@@ -158,8 +158,7 @@
 <script setup lang="ts">
 const route = useRoute();
 const guildId = String(route.params.guild_id);
-const { isModuleEnabled, getModuleConfig, saveModuleSettings, loadChannels, loadRoles,
-  channelOptions, roleOptions } = useServerSettings(guildId);
+const { state, isModuleEnabled, getModuleConfig, saveModuleSettings, loadChannels, loadRoles } = useServerSettings(guildId);
 const tab = ref<"forms" | "review" | "settings">("forms");
 type Question = { id: string; label: string; type: "short" | "paragraph" | "select";
   required: boolean; options?: string[] };
@@ -180,8 +179,8 @@ const editor = ref(false);
 const formError = ref("");
 const notice = ref("");
 const status = ref("");
-const roles = computed(() => roleOptions.value);
-const channels = computed(() => channelOptions.value);
+const roles = computed(() => state.value.roles);
+const channels = computed(() => state.value.channels.filter(ch => [0, 5].includes(ch.type)));
 const panelId = ref("");
 const panelChannelId = ref("");
 const panelForm = computed({

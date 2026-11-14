@@ -4,7 +4,6 @@ export default defineEventHandler(async event => {
   const body = await readBody(event);
   const guildId = applicationGuild(body?.guild_id);
   const id = applicationId(body?.id, "submission ID");
-  await requireModuleAccess(event, guildId, "applications");
   if (!["approved", "denied", "in_review"].includes(body?.status) ||
       (body.reason !== null && body.reason !== undefined &&
        (typeof body.reason !== "string" || body.reason.length > 1000))) {

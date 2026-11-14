@@ -118,7 +118,7 @@ async function submitModal(interaction: ModalSubmitInteraction, manager: ModuleM
     return interaction.editReply(error?.message || "Unable to submit your application.");
   }
 }
-async function execute(interaction: ChatInputCommandInteraction, manager: ModuleManager) {
+async function execute(interaction: ChatInputCommandInteraction, manager: ModuleManager): Promise<any> {
   if (!interaction.guildId || !interaction.guild) {
     return interaction.reply({ content: "Applications are only available in servers.", flags });
   }
