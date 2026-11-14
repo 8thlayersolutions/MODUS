@@ -282,10 +282,7 @@ async function saveForm() {
       throw new Error("Enter an application title with at least 2 characters.");
     }
     if (!draft.questions.length) throw new Error("Add at least one question.");
-    if (draft.cooldownDays === "" || draft.cooldownDays === null ||
-        draft.cooldownDays === undefined) {
-      draft.cooldownDays = 7;
-    }
+    if (!String(draft.cooldownDays).trim()) draft.cooldownDays = 7;
     const reviewerUserIds = [...new Set(draft.reviewerUserIdsText.split(/[\s,]+/).filter(Boolean))];
     if (reviewerUserIds.length > 25 || reviewerUserIds.some(id => !/^\d{16,22}$/.test(id))) {
       throw new Error("Reviewer users must be valid Discord User IDs (maximum 25).");
