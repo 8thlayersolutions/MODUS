@@ -1,5 +1,5 @@
-import { requireModuleAccess } from "../../utils/session";
-import { applicationRepos, applicationGuild, applicationId, notifyApplicationDecision } from "../../utils/applications";
+import { applicationRepos, applicationGuild, applicationId, requireApplicationReviewer,
+  notifyApplicationDecision, publishApplicationLog } from "../../utils/applications";
 export default defineEventHandler(async event => {
   const body = await readBody(event);
   const guildId = applicationGuild(body?.guild_id);
@@ -10,8 +10,11 @@ export default defineEventHandler(async event => {
     throw createError({ statusCode: 400, statusMessage: "Invalid review." });
   }
   const status = body.status as "approved" | "denied" | "in_review";
-  const reviewer = await requireModuleAccess(event, guildId, "applications");
-  const reviewed = await applicationRepos().applications.review({
+  const repos = applicationRepos();
+  const target = await repos.applications.getSubmission(guildId, id);
+  if (!target) throw createError({ statusCode: 404, statusMessage: "Submission not found." });
+  const reviewer = await requireApplicationReviewer(event, guildId, target.formId);
+  const reviewed = await repos.applications.review({
     guildId, id, actorId: reviewer.userId, status, reason: body.reason?.trim() || null,
   });
   if (!reviewed) throw createError({ statusCode: 409, statusMessage: "Submission already decided or missing." });
@@ -32,5 +35,7 @@ export default defineEventHandler(async event => {
   }
   const notified = await notifyApplicationDecision(guildId, reviewed.submission.applicantId,
     reviewed.form.title, status, body.reason?.trim() || null);
+  await publishApplicationLog(guildId, reviewed.form.submissionLogChannelId,
+    `**${reviewed.form.title.replace(/[@`]/g, "").slice(0, 100)}** · \`${id}\` · **${status}** by ${reviewer.userId}`);
   return { submission: reviewed.submission, roleAssigned, notified };
 });

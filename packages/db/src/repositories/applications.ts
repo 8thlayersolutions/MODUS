@@ -81,6 +81,7 @@ export class ApplicationRepository {
   async createForm(input: {
     guildId: string; title: string; description: string; questions: ApplicationQuestion[];
     open: boolean; approvalRoleId: string | null; cooldownDays: number;
+    reviewerUserIds: string[]; reviewerRoleIds: string[]; submissionLogChannelId: string | null;
   }): Promise<ApplicationFormRow> {
     const [row] = await this.db.insert(applicationForms).values(input).returning();
     return requireReturningRow(row, "application form insert");
@@ -138,10 +139,20 @@ export class ApplicationRepository {
     });
   }
 
-  async listSubmissions(guildId: string, status?: ApplicationStatus): Promise<ApplicationSubmissionRow[]> {
+  async getSubmission(guildId: string, id: string): Promise<ApplicationSubmissionRow | null> {
+    const [row] = await this.db.select().from(applicationSubmissions).where(and(
+      eq(applicationSubmissions.guildId, guildId), eq(applicationSubmissions.id, id),
+    )).limit(1);
+    return row ?? null;
+  }
+
+  async listSubmissions(guildId: string, status?: ApplicationStatus, allowedFormIds?: string[]): Promise<ApplicationSubmissionRow[]> {
+    if (allowedFormIds && allowedFormIds.length === 0) return [];
+
     return this.db.select().from(applicationSubmissions)
       .where(and(eq(applicationSubmissions.guildId, guildId),
-        ...(status ? [eq(applicationSubmissions.status, status)] : [])))
+        ...(status ? [eq(applicationSubmissions.status, status)] : []),
+        ...(allowedFormIds ? [inArray(applicationSubmissions.formId, allowedFormIds)] : [])))
       .orderBy(desc(applicationSubmissions.createdAt)).limit(100);
   }
 

@@ -1,3 +1,4 @@
+import { mayReviewApplication } from "@modus/db";
 /**
  * Session helpers for Discord OAuth.
  *
@@ -221,9 +222,18 @@ export async function getAccessibleModules(
 
   const grants = await repos.moduleAccess.getAllForGuild(guildId);
   const memberRoleIds = await fetchGuildMemberRoleIds(guildId, identity.userId);
-  return Object.entries(grants)
+  const accessible = Object.entries(grants)
     .filter(([, roleIds]) => roleIds.some((r) => memberRoleIds.includes(r)))
     .map(([moduleName]) => moduleName);
+  // Per-form application reviewers receive dashboard access to the applications
+  // page only. This does not grant them the ability to edit application settings.
+  const forms = await repos.applications.listForms(guildId);
+  if (forms.some(form => mayReviewApplication(form, {
+    userId: identity.userId, roleIds: memberRoleIds, isGuildManager: false,
+  })) && !accessible.includes("applications")) {
+    accessible.push("applications");
+  }
+  return accessible;
 }
 
 /** Return the Discord UID of the caller, or null when unauthenticated. */

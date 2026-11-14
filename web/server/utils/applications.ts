@@ -1,6 +1,7 @@
-import { ApplicationError, validateQuestions } from "@modus/db";
+import { ApplicationError, mayReviewApplication, validateQuestions } from "@modus/db";
 import { getRepos } from "./db";
-import { requireAuthedUserId } from "./session";
+import { requireAuthedUserId, requireGuildManager } from "./session";
+import { fetchGuildMemberRoleIds } from "./discord";
 import type { H3Event } from "h3";
 
 export function applicationRepos() {
@@ -22,19 +23,61 @@ export function applicationGuild(value: unknown): string {
   return value;
 }
 export function applicationFormInput(value: any) {
-  if (!value || typeof value !== "object" || Array.isArray(value) ||
-      typeof value.title !== "string" || value.title.trim().length < 2 ||
-      value.title.length > 100 || typeof value.description !== "string" ||
-      value.description.length > 2000 || typeof value.open !== "boolean" ||
-      (value.approvalRoleId !== null && value.approvalRoleId !== undefined &&
-       (typeof value.approvalRoleId !== "string" || !/^\d{16,22}$/.test(value.approvalRoleId))) ||
-      !Number.isInteger(value.cooldownDays) || value.cooldownDays < 0 || value.cooldownDays > 365) {
-    throw createError({ statusCode: 400, statusMessage: "Invalid application settings." });
+  const invalid = (message: string): never => {
+    throw createError({ statusCode: 400, statusMessage: message });
+  };
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return invalid("Application settings must be an object.");
   }
+
+  const title = typeof value.title === "string" ? value.title.trim() : "";
+  if (title.length < 2 || title.length > 100) {
+    return invalid("Application title must be between 2 and 100 characters.");
+  }
+
+  const description = value.description ?? "";
+  if (typeof description !== "string" || description.length > 2000) {
+    return invalid("Application description must be text of at most 2,000 characters.");
+  }
+
+  const open = value.open ?? true;
+  if (typeof open !== "boolean") {
+    return invalid("Open for applications must be enabled or disabled.");
+  }
+
+  // Select-menu implementations may submit an empty string for "No role".
+  // Treat that as a missing role, not an invalid snowflake.
+  const approvalRoleId = value.approvalRoleId || null;
+  if (approvalRoleId !== null &&
+      (typeof approvalRoleId !== "string" || !/^\d{16,22}$/.test(approvalRoleId))) {
+    return invalid("Approval role must be a valid Discord role or set to No automatic role.");
+  }
+
+  // Defaults should match the form builder and database: seven days.
+  // Accept numeric HTML-input strings without relaxing bounds.
+  const rawCooldown = value.cooldownDays;
+  const cooldownDays = rawCooldown === undefined || rawCooldown === null || rawCooldown === ""
+    ? 7
+    : (typeof rawCooldown === "string" && /^\d+$/.test(rawCooldown)
+      ? Number(rawCooldown)
+      : rawCooldown);
+  if (!Number.isInteger(cooldownDays) || cooldownDays < 0 || cooldownDays > 365) {
+    return invalid("Reapplication cooldown must be a whole number between 0 and 365 days.");
+  }
+
   try {
-    return { title: value.title.trim(), description: value.description.trim(),
-      open: value.open, approvalRoleId: value.approvalRoleId || null,
-      cooldownDays: value.cooldownDays, questions: validateQuestions(value.questions) };
+    const reviewerRoleIds = applicationReviewerIds(value.reviewerRoleIds ?? [], "reviewer roles");
+    const reviewerUserIds = applicationReviewerIds(value.reviewerUserIds ?? [], "reviewer users");
+    const submissionLogChannelId =
+      value.submissionLogChannelId === null ||
+      value.submissionLogChannelId === undefined ||
+      value.submissionLogChannelId === ""
+        ? null : applicationDiscordId(value.submissionLogChannelId, "submission log channel");
+    return {
+      reviewerRoleIds, reviewerUserIds, submissionLogChannelId,
+      title, description: description.trim(), open, approvalRoleId,
+      cooldownDays, questions: validateQuestions(value.questions),
+    };
   } catch (error) { throw applicationInputError(error); }
 }
 
@@ -80,4 +123,116 @@ export async function notifyApplicationDecision(guildId: string, memberId: strin
     });
     return true;
   } catch { return false; }
+}
+
+/** Only properly formatted, distinct Discord snowflakes can be saved. */
+export function applicationDiscordId(value: unknown, label: string): string {
+  if (typeof value !== "string" || !/^\d{16,22}$/.test(value)) {
+    throw createError({ statusCode: 400, statusMessage: `Invalid ${label}.` });
+  }
+  return value;
+}
+export function applicationReviewerIds(raw: unknown, label: string): string[] {
+  if (!Array.isArray(raw) || raw.length > 25) {
+    throw createError({ statusCode: 400, statusMessage: `Invalid ${label} (maximum 25).` });
+  }
+  return [...new Set(raw.map(id => applicationDiscordId(id, label)))];
+}
+
+/** Return manager privileges, or only roles from live Discord membership.
+ * Never rely on a client-supplied list of roles. */
+export async function applicationReviewerIdentity(event: H3Event, guildId: string) {
+  const identity = await requireAuthedUserId(event);
+  let isGuildManager = false;
+  try {
+    await requireGuildManager(event, guildId);
+    isGuildManager = true;
+  } catch (err: any) {
+    if (err?.statusCode !== 403) throw err;
+  }
+  if (!isGuildManager) {
+    // Reviewer grants are only for current members of the Discord server.
+    await requireApplicationMember(event, guildId);
+  }
+  const roleIds = isGuildManager ? [] : await fetchGuildMemberRoleIds(guildId, identity.userId);
+  return { ...identity, isGuildManager, roleIds };
+}
+
+export async function requireApplicationReviewer(event: H3Event, guildId: string, formId: string) {
+  const access = await applicationReviewerIdentity(event, guildId);
+  const form = await applicationRepos().applications.getForm(guildId, formId);
+  if (!form) throw createError({ statusCode: 404, statusMessage: "Application form not found." });
+  if (!mayReviewApplication(form, access)) {
+    throw createError({ statusCode: 403, statusMessage: "You are not assigned to review this application." });
+  }
+  return { ...access, form };
+}
+
+export async function publishApplicationLog(
+  guildId: string, channelId: string | null, content: string,
+): Promise<boolean> {
+  if (!channelId) return false;
+  const token = useRuntimeConfig().discordBotToken as string;
+  if (!token) return false;
+  const headers = { Authorization: `Bot ${token}` };
+  try {
+    const channel = await $fetch<{ guild_id?: string; type?: number }>(
+      `https://discord.com/api/v10/channels/${channelId}`, { headers });
+    if (channel.guild_id !== guildId || ![0, 5].includes(channel.type ?? -1)) {
+      console.warn("[Applications] Invalid per-form log channel:", channelId);
+      return false;
+    }
+    await $fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+      method: "POST", headers, body: {
+        content: content.slice(0, 1900),
+        allowed_mentions: { parse: [] },
+      },
+    });
+    return true;
+  } catch (error) {
+    console.warn("[Applications] Log channel delivery failed", error);
+    return false;
+  }
+}
+
+/** Validate all saved guild-specific Discord destinations and roles. */
+export async function validateApplicationRoutingTargets(
+  guildId: string, input: {
+    approvalRoleId: string | null; reviewerRoleIds: string[];
+    submissionLogChannelId: string | null;
+  },
+): Promise<void> {
+  if (!input.approvalRoleId && input.reviewerRoleIds.length === 0 &&
+      !input.submissionLogChannelId) return;
+  const token = useRuntimeConfig().discordBotToken as string;
+  if (!token) throw createError({ statusCode: 503, statusMessage: "Discord bot token not configured." });
+  const headers = { Authorization: `Bot ${token}` };
+  if (input.approvalRoleId || input.reviewerRoleIds.length) {
+    let roles: { id: string }[];
+    try {
+      roles = await $fetch<{ id: string }[]>(
+        `https://discord.com/api/v10/guilds/${guildId}/roles`, { headers },
+      );
+    } catch {
+      throw createError({ statusCode: 503, statusMessage: "Cannot verify Discord roles for this server." });
+    }
+    const roleIds = new Set(roles.map(role => role.id));
+    if ((input.approvalRoleId && !roleIds.has(input.approvalRoleId)) ||
+        input.reviewerRoleIds.some(id => !roleIds.has(id))) {
+      throw createError({ statusCode: 400, statusMessage: "One or more selected roles do not belong to this Discord server." });
+    }
+  }
+  if (input.submissionLogChannelId) {
+    let channel: { guild_id?: string; type?: number };
+    try {
+      channel = await $fetch<{ guild_id?: string; type?: number }>(
+        `https://discord.com/api/v10/channels/${input.submissionLogChannelId}`, { headers },
+      );
+    } catch {
+      throw createError({ statusCode: 400, statusMessage: "The bot cannot access the selected submission log channel." });
+    }
+    if (channel.guild_id !== guildId || ![0, 5].includes(channel.type ?? -1)) {
+      throw createError({ statusCode: 400, statusMessage: "Submission log channel must be a text or announcement channel in this server." });
+    }
+  }
 }

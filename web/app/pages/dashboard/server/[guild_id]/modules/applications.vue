@@ -7,13 +7,13 @@
     <div class="flex flex-wrap gap-2">
       <UButton :variant="tab === 'forms' ? 'solid' : 'soft'" @click="tab = 'forms'">Forms</UButton>
       <UButton :variant="tab === 'review' ? 'solid' : 'soft'" @click="tab = 'review'; loadQueue()">Submissions</UButton>
-      <UButton :variant="tab === 'settings' ? 'solid' : 'soft'" @click="tab = 'settings'">Settings</UButton>
+      <UButton v-if="canManage" :variant="tab === 'settings' ? 'solid' : 'soft'" @click="tab = 'settings'">Settings</UButton>
     </div>
 
     <DashboardModuleSection v-if="tab === 'forms'" title="Application forms"
       description="Each form can be completed in Discord if it has five or fewer text questions. Larger forms use the MODUS website.">
       <template #actions>
-        <UButton icon="i-lucide-plus" color="primary" @click="newForm">New form</UButton>
+        <UButton v-if="canManage" icon="i-lucide-plus" color="primary" @click="newForm">New form</UButton>
       </template>
       <p v-if="loading" class="text-sm text-gray-400">Loading forms…</p>
       <p v-if="!loading && !forms.length" class="py-6 text-sm text-gray-400">No applications configured yet.</p>
@@ -22,13 +22,13 @@
           <p class="font-semibold text-white">{{ form.title }}</p>
           <p class="text-xs text-gray-400">{{ form.open ? 'Open' : 'Closed' }} · {{ form.questions.length }} questions · v{{ form.version }}</p>
         </div>
-        <UButton size="sm" variant="soft" @click="editForm(form)">Edit</UButton>
-        <UButton size="sm" variant="soft" icon="i-lucide-send" @click="panelForm = form; tab = 'settings'">Post panel</UButton>
+        <UButton v-if="canManage" size="sm" variant="soft" @click="editForm(form)">Edit</UButton>
+        <UButton v-if="canManage" size="sm" variant="soft" icon="i-lucide-send" @click="panelForm = form; tab = 'settings'">Post panel</UButton>
         <UButton size="sm" variant="ghost" :to="`/apply/${guildId}/${form.id}`" target="_blank">Preview link</UButton>
       </div>
     </DashboardModuleSection>
 
-    <DashboardModuleSection v-if="tab === 'forms' && editor" title="Form builder"
+    <DashboardModuleSection v-if="tab === 'forms' && editor && canManage" title="Form builder"
       description="Changing questions creates a new form version. Existing submissions retain their original question labels.">
       <div class="space-y-5">
         <UFormField label="Title"><UInput v-model="draft.title" maxlength="100" class="w-full" /></UFormField>
@@ -40,12 +40,37 @@
               class="w-24 rounded border border-white/20 bg-gray-900 px-2 py-1 text-white" />
           </label>
         </div>
-        <UFormField label="Role granted on approval">
+        <UFormField label="Role granted on approval" description="The bot must have Manage Roles, and its highest role must be above the target role.">
           <select v-model="draft.approvalRoleId" class="w-full rounded border border-white/20 bg-gray-900 p-2 text-white">
             <option :value="null">No automatic role</option>
-            <option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option>
+            <option v-for="role in roles" :key="role.id" :value="role.id" :disabled="role.managed || (state.botTopPosition !== null && role.position >= state.botTopPosition)">{{ role.name }}</option>
           </select>
         </UFormField>
+        <div class="space-y-4 rounded-xl border border-violet-500/20 bg-violet-500/[0.025] p-5">
+          <h3 class="font-semibold text-white">Reviewers and submission logs for this form</h3>
+          <p class="text-sm text-gray-400">Only server managers and the selected users or roles can view and decide applications for this form. Reviewers for other forms do not get access here.</p>
+          <UFormField label="Reviewer users (Discord User IDs)"
+            description="Optional. Enter one or more Discord user IDs, separated by commas. You can leave this blank to allow only server managers and reviewer roles.">
+            <UTextarea v-model="draft.reviewerUserIdsText" :rows="2"
+              placeholder="123456789012345678, 234567890123456789" class="w-full" />
+          </UFormField>
+          <UFormField label="Reviewer roles"
+            description="Members with any checked role can review only this application.">
+            <div class="grid max-h-56 grid-cols-1 gap-2 overflow-y-auto rounded-lg border border-white/10 p-3 sm:grid-cols-2">
+              <label v-for="role in roles" :key="role.id" class="flex items-center gap-2 text-sm text-gray-300">
+                <input v-model="draft.reviewerRoleIds" type="checkbox" :value="role.id" /> {{ role.name }}
+              </label>
+              <p v-if="roles.length === 0" class="text-sm text-gray-500">No roles were loaded.</p>
+            </div>
+          </UFormField>
+          <UFormField label="Submission log channel"
+            description="New submissions and review decisions for this form go to this channel only. Leave blank to disable logs.">
+            <select v-model="draft.submissionLogChannelId" class="w-full rounded border border-white/20 bg-gray-900 p-2 text-white">
+              <option :value="null">No submission log channel</option>
+              <option v-for="ch in channels" :key="ch.id" :value="ch.id">#{{ ch.name }}</option>
+            </select>
+          </UFormField>
+        </div>
         <div class="flex items-center justify-between">
           <h3 class="font-semibold text-white">Questions ({{ draft.questions.length }}/20)</h3>
           <UButton variant="soft" size="sm" icon="i-lucide-plus" :disabled="draft.questions.length >= 20"
@@ -82,6 +107,11 @@
     <DashboardModuleSection v-if="tab === 'review'" title="Application review queue"
       description="Decisions are final. All submissions are restricted to this Discord server.">
       <div class="mb-4 flex flex-wrap gap-2">
+        <select v-model="selectedForm" class="rounded border border-white/20 bg-gray-900 p-2 text-sm text-white"
+          @change="loadQueue">
+          <option value="">All assigned forms</option>
+          <option v-for="form in forms" :key="form.id" :value="form.id">{{ form.title }}</option>
+        </select>
         <select v-model="status" class="rounded border border-white/20 bg-gray-900 p-2 text-sm text-white"
           @change="loadQueue">
           <option value="">All statuses</option><option value="pending">Pending</option>
@@ -126,23 +156,9 @@
       </div>
     </DashboardModuleSection>
 
-    <DashboardModuleSection v-if="tab === 'settings'" title="Notifications and Discord panels"
-      description="Reviewer roles apply to Discord commands. Dashboard reviewers can also be delegated through Module Access.">
+    <DashboardModuleSection v-if="tab === 'settings' && canManage" title="Discord application panels"
+      description="Reviewers and submission log channels are configured separately within each form.">
       <div class="space-y-4">
-        <UFormField label="Review notification channel">
-          <select v-model="config.reviewChannelId" class="w-full rounded border border-white/20 bg-gray-900 p-2 text-white">
-            <option value="">None</option>
-            <option v-for="ch in channels" :key="ch.id" :value="ch.id">#{{ ch.name }}</option>
-          </select>
-        </UFormField>
-        <UFormField label="Reviewer roles">
-          <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <label v-for="role in roles" :key="role.id" class="flex items-center gap-2 text-sm text-gray-300">
-              <input v-model="config.staffRoleIds" type="checkbox" :value="role.id" /> {{ role.name }}
-            </label>
-          </div>
-        </UFormField>
-        <UButton :loading="savingSettings" @click="saveSettings">Save settings</UButton>
         <div class="border-t border-white/10 pt-5">
           <h3 class="font-semibold text-white">Publish a panel</h3>
           <p class="mb-3 text-sm text-gray-400">Members click Apply Now in Discord to open the native form or web link.</p>
@@ -173,6 +189,7 @@ type Question = { id: string; label: string; type: "short" | "paragraph" | "sele
   required: boolean; options?: string[] };
 type Form = { id: string; guildId: string; title: string; description: string;
   questions: Question[]; version: number; open: boolean; approvalRoleId: string | null;
+  reviewerRoleIds: string[]; reviewerUserIds: string[]; submissionLogChannelId: string | null;
   cooldownDays: number; panelChannelId: string | null; panelMessageId: string | null };
 type Submission = { id: string; formId: string; applicantId: string; source: string;
   status: string; createdAt: string; answers: Record<string, string>;
@@ -197,12 +214,13 @@ async function loadAudit(id: string) {
   }
 }
 const saving = ref(false);
-const savingSettings = ref(false);
+const canManage = ref(false);
 const posting = ref(false);
 const editor = ref(false);
 const formError = ref("");
 const notice = ref("");
 const status = ref("");
+const selectedForm = ref("");
 const roles = computed(() => state.value.roles);
 const channels = computed(() => state.value.channels.filter(ch => [0, 5].includes(ch.type)));
 const panelId = ref("");
@@ -211,11 +229,13 @@ const panelForm = computed({
   get: () => forms.value.find(f => f.id === panelId.value) || null,
   set: (form: Form | null) => { panelId.value = form?.id || ""; },
 });
-const config = reactive<{ reviewChannelId: string; staffRoleIds: string[] }>({
-  reviewChannelId: "", staffRoleIds: [],
+const empty = () => ({
+  id: "", title: "", description: "", open: true,
+  approvalRoleId: null as string | null, cooldownDays: 7,
+  reviewerRoleIds: [] as string[], reviewerUserIdsText: "",
+  submissionLogChannelId: null as string | null,
+  questions: [] as Question[],
 });
-const empty = () => ({ id: "", title: "", description: "", open: true,
-  approvalRoleId: null as string | null, cooldownDays: 7, questions: [] as Question[] });
 const draft = reactive(empty());
 const formTitle = (id: string) => forms.value.find(f => f.id === id)?.title || id;
 let number = 0;
@@ -235,6 +255,9 @@ function editForm(form: Form) {
   Object.assign(draft, { id: form.id, title: form.title,
     description: form.description, open: form.open,
     approvalRoleId: form.approvalRoleId, cooldownDays: form.cooldownDays,
+    reviewerRoleIds: [...(form.reviewerRoleIds ?? [])],
+    reviewerUserIdsText: (form.reviewerUserIds ?? []).join(", "),
+    submissionLogChannelId: form.submissionLogChannelId ?? null,
     questions: form.questions.map(q => ({ ...q, options: q.options ? [...q.options] : undefined })) });
   editor.value = true;
   formError.value = "";
@@ -242,10 +265,11 @@ function editForm(form: Form) {
 async function loadForms() {
   loading.value = true;
   try {
-    const result = await $fetch<{ forms: Form[] }>("/api/applications/manage", {
+    const result = await $fetch<{ forms: Form[]; canManage: boolean }>("/api/applications/manage", {
       params: { guild_id: guildId },
     });
     forms.value = result.forms;
+    canManage.value = result.canManage;
   } catch (err: any) {
     notice.value = err?.data?.statusMessage || "Couldn't load application forms.";
   } finally { loading.value = false; }
@@ -254,10 +278,21 @@ async function saveForm() {
   saving.value = true;
   formError.value = "";
   try {
+    if (!draft.title.trim() || draft.title.trim().length < 2) {
+      throw new Error("Enter an application title with at least 2 characters.");
+    }
     if (!draft.questions.length) throw new Error("Add at least one question.");
+    if (!String(draft.cooldownDays).trim()) draft.cooldownDays = 7;
+    const reviewerUserIds = [...new Set(draft.reviewerUserIdsText.split(/[\s,]+/).filter(Boolean))];
+    if (reviewerUserIds.length > 25 || reviewerUserIds.some(id => !/^\d{16,22}$/.test(id))) {
+      throw new Error("Reviewer users must be valid Discord User IDs (maximum 25).");
+    }
     const body = { guild_id: guildId, title: draft.title, description: draft.description,
       open: draft.open, cooldownDays: draft.cooldownDays,
-      approvalRoleId: draft.approvalRoleId, questions: draft.questions };
+      approvalRoleId: draft.approvalRoleId,
+      reviewerUserIds, reviewerRoleIds: draft.reviewerRoleIds,
+      submissionLogChannelId: draft.submissionLogChannelId,
+      questions: draft.questions };
     if (draft.id) {
       await $fetch(`/api/applications/forms/${draft.id}`, { method: "PUT", body });
     } else {
@@ -274,7 +309,10 @@ async function loadQueue() {
   queueLoading.value = true;
   try {
     const result = await $fetch<{ submissions: Submission[] }>("/api/applications/queue", {
-      params: { guild_id: guildId, ...(status.value ? { status: status.value } : {}) },
+      params: { guild_id: guildId,
+        ...(status.value ? { status: status.value } : {}),
+        ...(selectedForm.value ? { form_id: selectedForm.value } : {}),
+      },
     });
     submissions.value = result.submissions;
   } catch (err: any) {
@@ -297,16 +335,6 @@ async function review(s: Submission, next: "approved" | "denied" | "in_review") 
     notice.value = err?.data?.statusMessage || err?.message || "Review failed.";
   }
 }
-async function saveSettings() {
-  savingSettings.value = true;
-  try {
-    const ok = await saveModuleSettings("applications", {
-      reviewChannelId: config.reviewChannelId || null,
-      staffRoleIds: config.staffRoleIds,
-    });
-    notice.value = ok ? "Settings saved." : "Could not save settings.";
-  } finally { savingSettings.value = false; }
-}
 async function postPanel() {
   posting.value = true;
   try {
@@ -320,11 +348,6 @@ async function postPanel() {
 }
 onMounted(async () => {
   await Promise.all([loadForms(), loadChannels(), loadRoles()]);
-  const saved = getModuleConfig("applications");
-  if (saved) {
-    config.reviewChannelId = typeof saved.reviewChannelId === "string" ? saved.reviewChannelId : "";
-    config.staffRoleIds = Array.isArray(saved.staffRoleIds) ? saved.staffRoleIds : [];
-  }
 });
 useHead({ title: "Applications | MODUS" });
 </script>
