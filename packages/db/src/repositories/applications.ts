@@ -32,6 +32,7 @@ export function validateQuestions(value: unknown): ApplicationQuestion[] {
         v.options.length > 20 || v.options.some((x: unknown) => typeof x !== "string" || !x.trim() || x.length > 100))) {
       throw new ApplicationError("Select questions require 2–20 short options.");
     }
+    if (v.type === "select" && new Set(v.options).size < 2) { throw new ApplicationError("Select questions need two distinct options."); }
     return { id: v.id, label: v.label.trim(), type: v.type, required: v.required,
       ...(v.type === "select" ? { options: [...new Set(v.options)] } : {}) } as ApplicationQuestion;
   });
@@ -119,7 +120,7 @@ export class ApplicationRepository {
       if (latest && ["pending", "in_review", "approved"].includes(latest.status)) {
         throw new ApplicationError(latest.status === "approved" ? "Your application was already approved." : "You already have an application awaiting a decision.");
       }
-      if (latest?.status === "denied" && Date.now() - latest.createdAt.getTime() <
+      if (latest?.status === "denied" && Date.now() - (latest.reviewedAt ?? latest.createdAt).getTime() <
           form.cooldownDays * 86_400_000) {
         throw new ApplicationError(`Please wait ${form.cooldownDays} day(s) after a denial before reapplying.`);
       }
