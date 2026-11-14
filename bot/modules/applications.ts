@@ -6,7 +6,7 @@ import {
   TextInputBuilder, TextInputStyle,
 } from "discord.js";
 import { BotModule, ModuleManager } from "../ModuleManager";
-import type { ApplicationFormRow } from "@modus/db";
+import { mayReviewApplication, type ApplicationFormRow } from "@modus/db";
 
 const MODULE = "applications";
 const flags = [MessageFlags.Ephemeral] as const;
@@ -42,14 +42,14 @@ function nativeForm(form: ApplicationFormRow) {
 async function enabled(manager: ModuleManager, guildId: string) {
   return manager.databaseService.isModuleEnabled(guildId, MODULE);
 }
-async function staff(manager: ModuleManager, guildId: string, userId: string,
-  memberRoles: readonly string[], manageGuild: boolean) {
-  if (manageGuild) return true;
-  const settings = await manager.databaseService.getModuleSettings(guildId, MODULE);
-  const allowed = Array.isArray(settings?.staffRoleIds) ? settings.staffRoleIds : [];
-  return memberRoles.some(id => allowed.includes(id));
+async function isManager(interaction: ChatInputCommandInteraction, manager: ModuleManager): Promise<boolean> {
+  if (!interaction.guildId) return false;
+  if (interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) return true;
+  const server = await manager.databaseService.servers.getByGuildId(interaction.guildId);
+  return !!server && (server.owner_id === interaction.user.id ||
+    server.admin_user_ids.includes(interaction.user.id));
 }
-function roleIds(member: any): string[] {
+function memberRoleIds(member: any): string[] {
   if (!member?.roles) return [];
   return Array.isArray(member.roles) ? member.roles : [...member.roles.cache.keys()];
 }
@@ -101,18 +101,17 @@ async function submitModal(interaction: ModalSubmitInteraction, manager: ModuleM
       guildId, formId: form.id, applicantId: interaction.user.id, answers, source: "discord",
     });
     await interaction.editReply(`Your application **${form.title}** was submitted. Reference: \`${row.id}\`.`);
-    const settings = await manager.databaseService.getModuleSettings(guildId, MODULE);
-    const reviewChannelId = typeof settings?.reviewChannelId === "string" ? settings.reviewChannelId : "";
-    if (reviewChannelId && interaction.guild) {
+    // The submission log channel belongs to this form, not to the entire module.
+    if (form.submissionLogChannelId && interaction.guild) {
       try {
-        const channel = await interaction.guild.channels.fetch(reviewChannelId);
-        if (channel?.isTextBased() && channel.isSendable()) {
+        const channel = await interaction.guild.channels.fetch(form.submissionLogChannelId);
+        if (channel?.guildId === guildId && channel.isSendable()) {
           await channel.send({
-            content: `New **${form.title.replace(/[@`]/g, "").slice(0, 80)}** application from <@${interaction.user.id}>. ID: \`${row.id}\`.`,
+            content: `New **${form.title.replace(/[@`]/g, "").slice(0, 80)}** application from user ${interaction.user.id}. ID: \`${row.id}\`.`,
             allowedMentions: { parse: [] },
           });
         }
-      } catch (error) { console.warn("[Applications] Could not notify review channel:", error); }
+      } catch (error) { console.warn("[Applications] Could not notify form log channel:", error); }
     }
   } catch (error: any) {
     return interaction.editReply(error?.message || "Unable to submit your application.");
@@ -147,10 +146,9 @@ async function execute(interaction: ChatInputCommandInteraction, manager: Module
       ? rows.slice(0, 10).map(r => `\`${r.id}\` — **${r.status}** (<t:${Math.floor(r.createdAt.getTime() / 1000)}:R>)`).join("\n")
       : "You have not submitted an application here.");
   }
-  const authorized = await staff(manager, guildId, interaction.user.id,
-    roleIds(interaction.member), interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild) ?? false);
-  if (!authorized) return interaction.editReply("You need a reviewer role or Manage Server permission.");
+  const managerAccess = await isManager(interaction, manager);
   if (sub === "panel") {
+    if (!managerAccess) return interaction.editReply("Only server managers can publish application panels.");
     const formId = interaction.options.getString("form", true);
     const channel = interaction.options.getChannel("channel", true);
     const form = await repository.getForm(guildId, formId);
@@ -178,6 +176,17 @@ async function execute(interaction: ChatInputCommandInteraction, manager: Module
     const status = interaction.options.getString("decision", true) as "in_review" | "approved" | "denied";
     const reason = interaction.options.getString("reason")?.trim() || null;
     if (!/^[a-f0-9-]{36}$/i.test(id)) return interaction.editReply("Invalid submission ID.");
+    // Resolve and authorize the submission's own form before making a decision.
+    const submission = await repository.getSubmission(guildId, id);
+    if (!submission) return interaction.editReply("Submission not found.");
+    const form = await repository.getForm(guildId, submission.formId);
+    if (!form || !mayReviewApplication(form, {
+      userId: interaction.user.id,
+      roleIds: memberRoleIds(interaction.member),
+      isGuildManager: managerAccess,
+    })) {
+      return interaction.editReply("You are not authorized to review this application.");
+    }
     const result = await repository.review({
       guildId, id, actorId: interaction.user.id, status, reason,
     });
@@ -198,6 +207,17 @@ async function execute(interaction: ChatInputCommandInteraction, manager: Module
         allowedMentions: { parse: [] },
       });
     } catch { /* User may have DMs closed. */ }
+    if (result.form.submissionLogChannelId) {
+      try {
+        const channel = await interaction.guild.channels.fetch(result.form.submissionLogChannelId);
+        if (channel?.guildId === guildId && channel.isSendable()) {
+          await channel.send({
+            content: `**${result.form.title.replace(/[@`]/g, "").slice(0, 80)}** application \`${id}\` marked **${status}** by ${interaction.user.id}.`,
+            allowedMentions: { parse: [] },
+          });
+        }
+      } catch (error) { console.warn("[Applications] Could not update log channel", error); }
+    }
     return interaction.editReply(`Application \`${id}\` marked **${status}**.${warning}`);
   }
 }
