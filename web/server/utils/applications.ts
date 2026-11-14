@@ -23,23 +23,61 @@ export function applicationGuild(value: unknown): string {
   return value;
 }
 export function applicationFormInput(value: any) {
-  if (!value || typeof value !== "object" || Array.isArray(value) ||
-      typeof value.title !== "string" || value.title.trim().length < 2 ||
-      value.title.length > 100 || typeof value.description !== "string" ||
-      value.description.length > 2000 || typeof value.open !== "boolean" ||
-      (value.approvalRoleId !== null && value.approvalRoleId !== undefined &&
-       (typeof value.approvalRoleId !== "string" || !/^\d{16,22}$/.test(value.approvalRoleId))) ||
-      !Number.isInteger(value.cooldownDays) || value.cooldownDays < 0 || value.cooldownDays > 365) {
-    throw createError({ statusCode: 400, statusMessage: "Invalid application settings." });
+  const invalid = (message: string): never => {
+    throw createError({ statusCode: 400, statusMessage: message });
+  };
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return invalid("Application settings must be an object.");
   }
+
+  const title = typeof value.title === "string" ? value.title.trim() : "";
+  if (title.length < 2 || title.length > 100) {
+    return invalid("Application title must be between 2 and 100 characters.");
+  }
+
+  const description = value.description ?? "";
+  if (typeof description !== "string" || description.length > 2000) {
+    return invalid("Application description must be text of at most 2,000 characters.");
+  }
+
+  const open = value.open ?? true;
+  if (typeof open !== "boolean") {
+    return invalid("Open for applications must be enabled or disabled.");
+  }
+
+  // Select-menu implementations may submit an empty string for "No role".
+  // Treat that as a missing role, not an invalid snowflake.
+  const approvalRoleId = value.approvalRoleId || null;
+  if (approvalRoleId !== null &&
+      (typeof approvalRoleId !== "string" || !/^\d{16,22}$/.test(approvalRoleId))) {
+    return invalid("Approval role must be a valid Discord role or set to No automatic role.");
+  }
+
+  // Defaults should match the form builder and database: seven days.
+  // Accept numeric HTML-input strings without relaxing bounds.
+  const rawCooldown = value.cooldownDays;
+  const cooldownDays = rawCooldown === undefined || rawCooldown === null || rawCooldown === ""
+    ? 7
+    : (typeof rawCooldown === "string" && /^\d+$/.test(rawCooldown)
+      ? Number(rawCooldown)
+      : rawCooldown);
+  if (!Number.isInteger(cooldownDays) || cooldownDays < 0 || cooldownDays > 365) {
+    return invalid("Reapplication cooldown must be a whole number between 0 and 365 days.");
+  }
+
   try {
     const reviewerRoleIds = applicationReviewerIds(value.reviewerRoleIds ?? [], "reviewer roles");
     const reviewerUserIds = applicationReviewerIds(value.reviewerUserIds ?? [], "reviewer users");
-    const submissionLogChannelId = value.submissionLogChannelId === null || value.submissionLogChannelId === undefined || value.submissionLogChannelId === "" ? null : applicationDiscordId(value.submissionLogChannelId, "submission log channel");
-    return { reviewerRoleIds, reviewerUserIds, submissionLogChannelId,
-      title: value.title.trim(), description: value.description.trim(),
-      open: value.open, approvalRoleId: value.approvalRoleId || null,
-      cooldownDays: value.cooldownDays, questions: validateQuestions(value.questions) };
+    const submissionLogChannelId =
+      value.submissionLogChannelId === null ||
+      value.submissionLogChannelId === undefined ||
+      value.submissionLogChannelId === ""
+        ? null : applicationDiscordId(value.submissionLogChannelId, "submission log channel");
+    return {
+      reviewerRoleIds, reviewerUserIds, submissionLogChannelId,
+      title, description: description.trim(), open, approvalRoleId,
+      cooldownDays, questions: validateQuestions(value.questions),
+    };
   } catch (error) { throw applicationInputError(error); }
 }
 
@@ -89,7 +127,7 @@ export async function notifyApplicationDecision(guildId: string, memberId: strin
 
 /** Only properly formatted, distinct Discord snowflakes can be saved. */
 export function applicationDiscordId(value: unknown, label: string): string {
-  if (typeof value !== "string" || !/^\\d{16,22}$/.test(value)) {
+  if (typeof value !== "string" || !/^\d{16,22}$/.test(value)) {
     throw createError({ statusCode: 400, statusMessage: `Invalid ${label}.` });
   }
   return value;

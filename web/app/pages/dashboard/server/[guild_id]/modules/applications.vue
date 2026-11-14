@@ -278,9 +278,16 @@ async function saveForm() {
   saving.value = true;
   formError.value = "";
   try {
+    if (!draft.title.trim() || draft.title.trim().length < 2) {
+      throw new Error("Enter an application title with at least 2 characters.");
+    }
     if (!draft.questions.length) throw new Error("Add at least one question.");
-    const reviewerUserIds = [...new Set(draft.reviewerUserIdsText.split(/[\\s,]+/).filter(Boolean))];
-    if (reviewerUserIds.length > 25 || reviewerUserIds.some(id => !/^\\d{16,22}$/.test(id))) {
+    if (draft.cooldownDays === "" || draft.cooldownDays === null ||
+        draft.cooldownDays === undefined) {
+      draft.cooldownDays = 7;
+    }
+    const reviewerUserIds = [...new Set(draft.reviewerUserIdsText.split(/[\s,]+/).filter(Boolean))];
+    if (reviewerUserIds.length > 25 || reviewerUserIds.some(id => !/^\d{16,22}$/.test(id))) {
       throw new Error("Reviewer users must be valid Discord User IDs (maximum 25).");
     }
     const body = { guild_id: guildId, title: draft.title, description: draft.description,
