@@ -1,4 +1,4 @@
-import { requireModuleAccess } from "../../utils/session";
+import { requireGuildManager } from "../../utils/session";
 import { applicationRepos, applicationGuild, applicationId } from "../../utils/applications";
 export default defineEventHandler(async event => {
   const body = await readBody(event);
@@ -6,7 +6,7 @@ export default defineEventHandler(async event => {
   const formId = applicationId(body?.form_id);
   const channelId = typeof body?.channel_id === "string" && /^\d{16,22}$/.test(body.channel_id) ? body.channel_id : null;
   if (!channelId) throw createError({ statusCode: 400, statusMessage: "Invalid channel ID." });
-  await requireModuleAccess(event, guildId, "applications");
+  await requireGuildManager(event, guildId);
   const repos = applicationRepos();
   const form = await repos.applications.getForm(guildId, formId);
   if (!form) throw createError({ statusCode: 404, statusMessage: "Form not found." });
