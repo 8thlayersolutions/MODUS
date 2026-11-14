@@ -31,3 +31,4 @@ export * from "./repositories/suggestion-votes";
 export * from "./repositories/starboard-posts";
 export * from "./rank-cards";
 export * from "./repositories/applications";
+export * from "./application-reviewers";

@@ -1323,6 +1323,10 @@ export const applicationForms = pgTable(
     version: integer("version").notNull().default(1),
     open: boolean("open").notNull().default(true),
     approvalRoleId: text("approval_role_id"),
+    // Per-form reviewers and submission routing; empty lists = managers only.
+    reviewerUserIds: text("reviewer_user_ids").array().notNull().default(sql`'{}'::text[]`),
+    reviewerRoleIds: text("reviewer_role_ids").array().notNull().default(sql`'{}'::text[]`),
+    submissionLogChannelId: text("submission_log_channel_id"),
     cooldownDays: integer("cooldown_days").notNull().default(7),
     panelChannelId: text("panel_channel_id"),
     panelMessageId: text("panel_message_id"),
