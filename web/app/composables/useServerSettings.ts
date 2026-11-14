@@ -113,6 +113,7 @@ export function useServerSettings(guildId: string) {
     "autoroles",
     "starboard",
     "suggestions",
+    "applications",
     "events",
     "polls",
     "giveaways",
