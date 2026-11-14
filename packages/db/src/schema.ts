@@ -1302,3 +1302,71 @@ export const suggestionVotes = pgTable(
   }),
 );
 export type SuggestionVoteRow = typeof suggestionVotes.$inferSelect;
+
+// ── applications (Discord + OAuth-authenticated web forms) ─────────────
+export interface ApplicationQuestion {
+  id: string;
+  label: string;
+  type: "short" | "paragraph" | "select";
+  required: boolean;
+  options?: string[];
+}
+
+export const applicationForms = pgTable(
+  "application_forms",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+    guildId: text("guild_id").notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull().default(""),
+    questions: jsonb("questions").$type<ApplicationQuestion[]>().notNull().default(sql`'[]'::jsonb`),
+    version: integer("version").notNull().default(1),
+    open: boolean("open").notNull().default(true),
+    approvalRoleId: text("approval_role_id"),
+    cooldownDays: integer("cooldown_days").notNull().default(7),
+    panelChannelId: text("panel_channel_id"),
+    panelMessageId: text("panel_message_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ byGuild: index("application_forms_guild_idx").on(t.guildId, t.createdAt) }),
+);
+export type ApplicationFormRow = typeof applicationForms.$inferSelect;
+
+export const applicationSubmissions = pgTable(
+  "application_submissions",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+    guildId: text("guild_id").notNull(),
+    formId: text("form_id").notNull(),
+    applicantId: text("applicant_id").notNull(),
+    answers: jsonb("answers").$type<Record<string, string>>().notNull(),
+    questionsSnapshot: jsonb("questions_snapshot").$type<ApplicationQuestion[]>().notNull(),
+    formVersion: integer("form_version").notNull(),
+    source: text("source").notNull(),
+    status: text("status").notNull().default("pending"),
+    reason: text("reason"),
+    reviewedBy: text("reviewed_by"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    byGuildStatus: index("application_submissions_guild_status_idx").on(t.guildId, t.status, t.createdAt),
+    byApplicant: index("application_submissions_applicant_idx").on(t.guildId, t.formId, t.applicantId, t.createdAt),
+  }),
+);
+export type ApplicationSubmissionRow = typeof applicationSubmissions.$inferSelect;
+
+export const applicationAudit = pgTable(
+  "application_audit",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+    guildId: text("guild_id").notNull(),
+    submissionId: text("submission_id").notNull(),
+    actorId: text("actor_id").notNull(),
+    action: text("action").notNull(),
+    details: jsonb("details").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ bySubmission: index("application_audit_submission_idx").on(t.guildId, t.submissionId, t.createdAt) }),
+);
