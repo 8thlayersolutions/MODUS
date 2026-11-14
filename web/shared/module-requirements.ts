@@ -87,6 +87,10 @@ const REQUIREMENTS: Record<string, Build> = {
       ...chan(s.categoryId, 'temp-voice category', ['ViewChannel', 'ManageChannels']),
     ],
   }),
+  'twitch-sync': (s) => ({
+    required: ['ManageRoles'],
+    roleIds: Object.values(isRecord(s.mappings) ? s.mappings : {}).map(str).filter(Boolean),
+  }),
   autoroles: (s) => ({
     required: ['ManageRoles'],
     roleIds: records(s.rules)

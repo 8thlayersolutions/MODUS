@@ -30,6 +30,10 @@
       "types": "./src/automod-rules/index.ts",
       "default": "./dist/automod-rules/index.js"
     },
+    "./twitch-sync": {
+      "types": "./src/twitch-sync.ts",
+      "default": "./dist/twitch-sync.js"
+    },
     "./recording-limits": {
       "types": "./src/recording-limits.ts",
       "default": "./dist/recording-limits.js"
