@@ -33,8 +33,8 @@ export function applicationFormInput(value: any) {
     throw createError({ statusCode: 400, statusMessage: "Invalid application settings." });
   }
   try {
-    const reviewerRoleIds = applicationReviewerIds(value.reviewerRoleIds, "reviewer roles");
-    const reviewerUserIds = applicationReviewerIds(value.reviewerUserIds, "reviewer users");
+    const reviewerRoleIds = applicationReviewerIds(value.reviewerRoleIds ?? [], "reviewer roles");
+    const reviewerUserIds = applicationReviewerIds(value.reviewerUserIds ?? [], "reviewer users");
     const submissionLogChannelId = value.submissionLogChannelId === null || value.submissionLogChannelId === undefined || value.submissionLogChannelId === "" ? null : applicationDiscordId(value.submissionLogChannelId, "submission log channel");
     return { reviewerRoleIds, reviewerUserIds, submissionLogChannelId,
       title: value.title.trim(), description: value.description.trim(),
@@ -154,5 +154,47 @@ export async function publishApplicationLog(
   } catch (error) {
     console.warn("[Applications] Log channel delivery failed", error);
     return false;
+  }
+}
+
+/** Validate all saved guild-specific Discord destinations and roles. */
+export async function validateApplicationRoutingTargets(
+  guildId: string, input: {
+    approvalRoleId: string | null; reviewerRoleIds: string[];
+    submissionLogChannelId: string | null;
+  },
+): Promise<void> {
+  if (!input.approvalRoleId && input.reviewerRoleIds.length === 0 &&
+      !input.submissionLogChannelId) return;
+  const token = useRuntimeConfig().discordBotToken as string;
+  if (!token) throw createError({ statusCode: 503, statusMessage: "Discord bot token not configured." });
+  const headers = { Authorization: `Bot ${token}` };
+  if (input.approvalRoleId || input.reviewerRoleIds.length) {
+    let roles: { id: string }[];
+    try {
+      roles = await $fetch<{ id: string }[]>(
+        `https://discord.com/api/v10/guilds/${guildId}/roles`, { headers },
+      );
+    } catch {
+      throw createError({ statusCode: 503, statusMessage: "Cannot verify Discord roles for this server." });
+    }
+    const roleIds = new Set(roles.map(role => role.id));
+    if ((input.approvalRoleId && !roleIds.has(input.approvalRoleId)) ||
+        input.reviewerRoleIds.some(id => !roleIds.has(id))) {
+      throw createError({ statusCode: 400, statusMessage: "One or more selected roles do not belong to this Discord server." });
+    }
+  }
+  if (input.submissionLogChannelId) {
+    let channel: { guild_id?: string; type?: number };
+    try {
+      channel = await $fetch<{ guild_id?: string; type?: number }>(
+        `https://discord.com/api/v10/channels/${input.submissionLogChannelId}`, { headers },
+      );
+    } catch {
+      throw createError({ statusCode: 400, statusMessage: "The bot cannot access the selected submission log channel." });
+    }
+    if (channel.guild_id !== guildId || ![0, 5].includes(channel.type ?? -1)) {
+      throw createError({ statusCode: 400, statusMessage: "Submission log channel must be a text or announcement channel in this server." });
+    }
   }
 }

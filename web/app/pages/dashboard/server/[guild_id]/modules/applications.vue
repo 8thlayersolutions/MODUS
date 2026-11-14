@@ -40,10 +40,10 @@
               class="w-24 rounded border border-white/20 bg-gray-900 px-2 py-1 text-white" />
           </label>
         </div>
-        <UFormField label="Role granted on approval">
+        <UFormField label="Role granted on approval" description="The bot must have Manage Roles, and its highest role must be above the target role.">
           <select v-model="draft.approvalRoleId" class="w-full rounded border border-white/20 bg-gray-900 p-2 text-white">
             <option :value="null">No automatic role</option>
-            <option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option>
+            <option v-for="role in roles" :key="role.id" :value="role.id" :disabled="role.managed || (state.botTopPosition !== null && role.position >= state.botTopPosition)">{{ role.name }}</option>
           </select>
         </UFormField>
         <div class="space-y-4 rounded-xl border border-violet-500/20 bg-violet-500/[0.025] p-5">
