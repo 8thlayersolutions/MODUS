@@ -113,6 +113,15 @@
           <UButton size="sm" color="success" @click="review(s, 'approved')">Approve</UButton>
           <UButton size="sm" color="error" @click="review(s, 'denied')">Deny</UButton>
         </div>
+        <UButton size="xs" variant="ghost" icon="i-lucide-history" @click="loadAudit(s.id)">
+          {{ auditFor === s.id ? 'Hide history' : 'Review history' }}
+        </UButton>
+        <div v-if="auditFor === s.id" class="space-y-2 rounded-lg bg-white/[0.025] p-3 text-xs text-gray-300">
+          <p v-if="!auditEntries.length">No activity recorded.</p>
+          <p v-for="entry in auditEntries" :key="entry.id">
+            {{ new Date(entry.createdAt).toLocaleString() }} — {{ entry.action }} by {{ entry.actorId }}
+          </p>
+        </div>
         <p v-if="s.reason" class="text-xs text-gray-400">Decision note: {{ s.reason }}</p>
       </div>
     </DashboardModuleSection>
@@ -172,6 +181,21 @@ const forms = ref<Form[]>([]);
 const submissions = ref<Submission[]>([]);
 const loading = ref(true);
 const queueLoading = ref(false);
+const auditFor = ref("");
+const auditEntries = ref<{ id: string; action: string; actorId: string; createdAt: string }[]>([]);
+async function loadAudit(id: string) {
+  if (auditFor.value === id) { auditFor.value = ""; return; }
+  auditFor.value = id;
+  auditEntries.value = [];
+  try {
+    const res = await $fetch<{ audit: typeof auditEntries.value }>("/api/applications/audit", {
+      params: { guild_id: guildId, submission_id: id },
+    });
+    if (auditFor.value === id) auditEntries.value = res.audit;
+  } catch (err: any) {
+    notice.value = err?.data?.statusMessage || "Unable to load audit history.";
+  }
+}
 const saving = ref(false);
 const savingSettings = ref(false);
 const posting = ref(false);
