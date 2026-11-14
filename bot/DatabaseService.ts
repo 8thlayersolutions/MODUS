@@ -41,6 +41,7 @@ import {
   AutoroleGrantRepository,
   SuggestionRepository,
   SuggestionVoteRepository,
+  ApplicationRepository,
   StarboardPostRepository,
   GuildEntitlementRepository,
   type PremiumStatus,
@@ -94,6 +95,7 @@ export class DatabaseService {
   public readonly autoroleGrants: AutoroleGrantRepository;
   public readonly suggestions: SuggestionRepository;
   public readonly suggestionVotes: SuggestionVoteRepository;
+  public readonly applications: ApplicationRepository;
   public readonly starboardPosts: StarboardPostRepository;
 
   /** TTL cache for guild config + tag lookups. Shared-shard aware via EventBus. */
@@ -175,6 +177,7 @@ export class DatabaseService {
     this.autoroleGrants = new AutoroleGrantRepository(db);
     this.suggestions = new SuggestionRepository(db);
     this.suggestionVotes = new SuggestionVoteRepository(db);
+    this.applications = new ApplicationRepository(db);
     this.starboardPosts = new StarboardPostRepository(db);
 
     // Periodic log flush. unref() so a pending timer never holds the

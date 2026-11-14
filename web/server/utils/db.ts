@@ -33,6 +33,7 @@ import {
   StarboardPostRepository,
   SuggestionRepository,
   SuggestionVoteRepository,
+  ApplicationRepository,
   type Database,
 } from "@modus/db";
 
@@ -64,6 +65,7 @@ export interface Repos {
   starboardPosts: StarboardPostRepository;
   suggestions: SuggestionRepository;
   suggestionVotes: SuggestionVoteRepository;
+  applications: ApplicationRepository;
 }
 
 let cached: Repos | null = null;
@@ -105,6 +107,7 @@ export function getRepos(): Repos | null {
       starboardPosts: new StarboardPostRepository(db),
       suggestions: new SuggestionRepository(db),
       suggestionVotes: new SuggestionVoteRepository(db),
+      applications: new ApplicationRepository(db),
     };
     return cached;
   } catch (err) {
