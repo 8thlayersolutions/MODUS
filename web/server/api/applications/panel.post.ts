@@ -13,8 +13,14 @@ export default defineEventHandler(async event => {
   const token = useRuntimeConfig().discordBotToken as string;
   if (!token) throw createError({ statusCode: 503, statusMessage: "Discord bot token missing." });
   const headers = { Authorization: `Bot ${token}` };
-  const channel = await $fetch<{ guild_id?: string; type?: number }>(
-    `https://discord.com/api/v10/channels/${channelId}`, { headers });
+  let channel: { guild_id?: string; type?: number };
+  try {
+    channel = await $fetch<{ guild_id?: string; type?: number }>(
+      `https://discord.com/api/v10/channels/${channelId}`, { headers });
+  } catch {
+    throw createError({ statusCode: 400, statusMessage:
+      "MODUS cannot see that channel. Give it View Channel permission and try again." });
+  }
   if (channel.guild_id !== guildId || ![0, 5].includes(channel.type ?? -1)) {
     throw createError({ statusCode: 400, statusMessage: "Channel must be a text/announcement channel in this server." });
   }
@@ -34,14 +40,23 @@ export default defineEventHandler(async event => {
       messageId = form.panelMessageId;
     } catch (error: any) {
       const code = error?.data?.code ?? error?.response?._data?.code;
-      if (code !== 10008) throw error;
+      if (code !== 10008) {
+        throw createError({ statusCode: 400, statusMessage:
+          "MODUS could not update this application panel. Check View Channel, Send Messages, and Embed Links permissions." });
+      }
     }
   }
   if (!messageId) {
-    const response = await $fetch<{ id: string }>(`https://discord.com/api/v10/channels/${channelId}/messages`, {
-      method: "POST", headers, body: payload,
-    });
-    messageId = response.id;
+    try {
+      const response = await $fetch<{ id: string }>(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+        method: "POST", headers, body: payload,
+      });
+      messageId = response.id;
+    } catch (error) {
+      console.error("[Applications] Discord panel message failed:", error);
+      throw createError({ statusCode: 400, statusMessage:
+        "Could not post the panel. MODUS needs View Channel, Send Messages and Embed Links permissions." });
+    }
   }
   await repos.applications.setPanel(guildId, form.id, channelId, messageId);
   return { ok: true, messageId };
