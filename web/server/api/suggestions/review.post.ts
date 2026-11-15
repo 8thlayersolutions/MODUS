@@ -66,6 +66,7 @@ export default defineEventHandler(async (event) => {
 
   let embedUpdated = false;
   let withdrawn = false;
+  let missingPosts = 0;
   const posts = allSuggestionPosts(updated);
   if (posts.length) {
     const payload = buildSuggestionMessage({
@@ -103,16 +104,19 @@ export default defineEventHandler(async (event) => {
       } catch (error: any) {
         const code = error?.data?.code ?? error?.response?._data?.code;
         if (code === 10008 || error?.status === 404 || error?.statusCode === 404) {
-          // The bot will also see Discord's deletion event; do not withdraw
-          // the suggestion as long as any other copy remains.
+          missingPosts++;
           continue;
         }
         console.error("[Suggestions Review API] Discord rejected the edit:", error?.data || error);
       }
     }
   }
+  if (posts.length && missingPosts === posts.length) {
+    await repos.suggestions.markWithdrawn(id);
+    withdrawn = true;
+  }
   for (const post of posts) {
-    if (!post.threadId) continue;
+    if (!post.threadId || withdrawn) continue;
     const label = STATUS_META[status].label;
     const note = `Marked **${label}** by <@${identity.userId}>` + (reason ? `: ${reason}` : "");
     try {
