@@ -99,6 +99,19 @@ export function createRequestGate(): { next(): number; isCurrent(token: number):
   };
 }
 
+/** Read an existing legacy single-channel setting or the newer multi-channel setting. */
+export function storedSuggestionChannelIds(raw: unknown): string[] {
+  if (!raw || typeof raw !== "object") return [];
+  const saved = raw as { channelIds?: unknown; channelId?: unknown };
+  const multi = Array.isArray(saved.channelIds)
+    ? saved.channelIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+    : [];
+  const legacy = typeof saved.channelId === "string" && saved.channelId.trim()
+    ? [saved.channelId]
+    : [];
+  return [...new Set(multi.length ? multi : legacy)].slice(0, 25);
+}
+
 /** Panel limits/defaults — mirror SUGGESTION_PANEL_* in bot/lib/schemas.ts and web/server/utils/suggestions.ts. */
 export const PANEL_LIMITS = { title: 100, blurb: 1500, buttonLabel: 80 } as const;
 export const PANEL_DEFAULTS = {
