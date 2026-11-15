@@ -25,6 +25,10 @@ export class TwitchSyncRepository {
         encryptedToken: input.encryptedToken, expiresAt: input.expiresAt, updatedAt: new Date() },
     });
   }
+  async refreshBroadcasterTokens(guildId: string, twitchId: string, encryptedToken: string, expiresAt: Date): Promise<void> {
+    await this.db.update(twitchSyncBroadcasters).set({ encryptedToken, expiresAt, updatedAt: new Date() })
+      .where(and(eq(twitchSyncBroadcasters.guildId, guildId), eq(twitchSyncBroadcasters.twitchId, twitchId)));
+  }
   async setMember(input: {
     guildId: string; discordId: string; twitchId: string; twitchLogin: string;
     encryptedToken: string; expiresAt: Date;
@@ -34,6 +38,10 @@ export class TwitchSyncRepository {
       set: { twitchId: input.twitchId, twitchLogin: input.twitchLogin,
         encryptedToken: input.encryptedToken, expiresAt: input.expiresAt, updatedAt: new Date() },
     });
+  }
+  async refreshMemberTokens(guildId: string, discordId: string, twitchId: string, encryptedToken: string, expiresAt: Date): Promise<void> {
+    await this.db.update(twitchSyncMembers).set({ encryptedToken, expiresAt, updatedAt: new Date() })
+      .where(and(eq(twitchSyncMembers.guildId, guildId), eq(twitchSyncMembers.discordId, discordId), eq(twitchSyncMembers.twitchId, twitchId)));
   }
   async listMembers(guildId: string): Promise<MemberLink[]> {
     return this.db.select().from(twitchSyncMembers)

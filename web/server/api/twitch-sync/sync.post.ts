@@ -75,11 +75,10 @@ export default defineEventHandler(async event => {
       let discordTokens = decryptTokens(link.encryptedToken);
       if (discordTokens.expiresAt < Date.now() + 60_000) {
         discordTokens = await refreshDiscordMember(discordTokens);
-        await repos.twitchSync.setMember({
-          guildId, discordId: link.discordId, twitchId: link.twitchId,
-          twitchLogin: link.twitchLogin, encryptedToken: encryptTokens(discordTokens),
-          expiresAt: new Date(discordTokens.expiresAt),
-        });
+        await repos.twitchSync.refreshMemberTokens(
+          guildId, link.discordId, link.twitchId,
+          encryptTokens(discordTokens), new Date(discordTokens.expiresAt),
+        );
       }
       const connection = await discordTwitchConnection(discordTokens.accessToken);
       // A changed connection may be a takeover/relink scenario. Require explicit relinking.

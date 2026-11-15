@@ -148,10 +148,7 @@ export async function activeTwitchToken(guildId: string): Promise<{ accessToken:
   }
   if (refresh) {
     tokens = await refreshTwitch(tokens);
-    await repo.setBroadcaster({
-      guildId, twitchId: row.twitchId, twitchLogin: row.twitchLogin,
-      encryptedToken: encryptTokens(tokens), expiresAt: new Date(tokens.expiresAt),
-    });
+    await repo.refreshBroadcasterTokens(guildId, row.twitchId, encryptTokens(tokens), new Date(tokens.expiresAt));
   }
   return { accessToken: tokens.accessToken, twitchId: row.twitchId, twitchLogin: row.twitchLogin };
 }
