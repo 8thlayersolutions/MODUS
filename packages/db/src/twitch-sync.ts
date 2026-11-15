@@ -3,14 +3,19 @@
  * Status IDs are stable and never refer to specific guild role names.
  */
 export const TWITCH_ROLE_TYPES = [
-  { id: "connected", label: "Twitch Connected", description: "Verified linked Twitch account" },
-  { id: "follower", label: "Follower", description: "Follows the configured Twitch channel" },
-  { id: "subscriber", label: "Any Subscriber", description: "Active subscription at any tier" },
-  { id: "tier1", label: "Tier 1 Subscriber", description: "Active Tier 1 subscription" },
-  { id: "tier2", label: "Tier 2 Subscriber", description: "Active Tier 2 subscription" },
-  { id: "tier3", label: "Tier 3 Subscriber", description: "Active Tier 3 subscription" },
-  { id: "vip", label: "Twitch VIP", description: "VIP in the broadcaster's channel" },
-  { id: "moderator", label: "Twitch Moderator", description: "Moderator in the broadcaster's channel" },
+  { id: "connected", label: "Twitch Connected", description: "Verified Discord-linked Twitch account", automatic: true },
+  { id: "broadcaster", label: "Broadcaster / Owner", description: "Owner of the configured Twitch channel", automatic: true },
+  { id: "editor", label: "Channel Editor", description: "Editor for the broadcaster's channel", automatic: true },
+  { id: "moderator", label: "Twitch Moderator", description: "Includes regular and Lead Moderators", automatic: true },
+  { id: "leadModerator", label: "Lead Moderator", description: "No separate public API lookup; included in Moderator status", automatic: false },
+  { id: "vip", label: "Twitch VIP", description: "VIP in the broadcaster's channel", automatic: true },
+  { id: "artist", label: "Artist", description: "No documented public Twitch role lookup", automatic: false },
+  { id: "businessManager", label: "Business Manager", description: "No documented public Twitch role lookup", automatic: false },
+  { id: "follower", label: "Follower", description: "Follows the configured Twitch channel", automatic: true },
+  { id: "subscriber", label: "Any Subscriber", description: "Active subscription at any tier", automatic: true },
+  { id: "tier1", label: "Tier 1 Subscriber", description: "Active Tier 1 subscription", automatic: true },
+  { id: "tier2", label: "Tier 2 Subscriber", description: "Active Tier 2 subscription", automatic: true },
+  { id: "tier3", label: "Tier 3 Subscriber", description: "Active Tier 3 subscription", automatic: true },
 ] as const;
 
 export type TwitchRoleType = (typeof TWITCH_ROLE_TYPES)[number]["id"];
@@ -27,6 +32,7 @@ export interface TwitchSyncSettings {
 const EMPTY_MAPPINGS: TwitchRoleMappings = {
   connected: "", follower: "", subscriber: "", tier1: "",
   tier2: "", tier3: "", vip: "", moderator: "",
+  editor: "", broadcaster: "", leadModerator: "", artist: "", businessManager: "",
 };
 
 const INTERVALS = [15, 30, 60, 360] as const;
@@ -90,4 +96,29 @@ export function validateTwitchSyncSettings(input: unknown):
     return { ok: false, error: "Remove expired roles must be true or false." };
   }
   return { ok: true, settings: parseTwitchSyncSettings(input) };
+}
+
+
+/** Pure policy layer: only API-verifiable statuses may confer automatic roles. */
+export function planTwitchRoleChanges(input: {
+  settings: TwitchSyncSettings;
+  verifiedStatuses: ReadonlySet<string>;
+  grantableRoleIds: ReadonlySet<string>;
+  heldRoleIds: ReadonlySet<string>;
+  recordedGrantRoleIds: ReadonlySet<string>;
+}): { desired: string[]; toGrant: string[]; toRevoke: string[] } {
+  const desired = [...new Set(TWITCH_ROLE_TYPES
+    .filter(type => type.automatic && input.verifiedStatuses.has(type.id))
+    .map(type => input.settings.mappings[type.id])
+    .filter(roleId => !!roleId && input.grantableRoleIds.has(roleId)))];
+  const desiredSet = new Set(desired);
+  return {
+    desired,
+    toGrant: desired.filter(roleId => !input.heldRoleIds.has(roleId)),
+    // Revocation is restricted to IDs recorded when MODUS itself assigned the role.
+    toRevoke: input.settings.removeStaleRoles
+      ? [...input.recordedGrantRoleIds].filter(roleId =>
+        !desiredSet.has(roleId) && input.grantableRoleIds.has(roleId))
+      : [],
+  };
 }
