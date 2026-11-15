@@ -91,6 +91,13 @@ const REQUIREMENTS: Record<string, Build> = {
     required: ['ManageRoles'],
     roleIds: Object.values(isRecord(s.mappings) ? s.mappings : {}).map(str).filter(Boolean),
   }),
+  'statistic-channels': (s) => {
+    const counters = records(s.counters).filter(counter => counter.enabled !== false)
+    return {
+      required: counters.length ? ['ManageChannels'] : [],
+      channels: counters.flatMap(counter => chan(counter.channelId, 'statistic voice channel', ['ViewChannel', 'ManageChannels'])),
+    }
+  },
   autoroles: (s) => ({
     required: ['ManageRoles'],
     roleIds: records(s.rules)

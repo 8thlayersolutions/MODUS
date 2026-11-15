@@ -26,6 +26,7 @@ import {
 } from "./RedisClient";
 import { EventBus } from "./EventBus";
 import { LeaderElection } from "./LeaderElection";
+import { startStatisticChannels, stopStatisticChannels } from "./modules/statistic-channels";
 import { registerMusicAPI } from "./MusicAPI";
 import { createMusicService } from "./music";
 import { botHealthResponse } from "./music/MusicMetrics";
@@ -49,6 +50,8 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMembers,
+    // Optional: online/offline estimates work without the privileged Presence intent.
+    ...(process.env.STATISTICS_ENABLE_PRESENCES === "true" ? [GatewayIntentBits.GuildPresences] : []),
     GatewayIntentBits.GuildInvites,
     GatewayIntentBits.GuildModeration,
     GatewayIntentBits.GuildMessageReactions,
@@ -244,6 +247,19 @@ client.once("ready", async () => {
   // listeners, timers) — no per-module wiring needed here.
   await moduleManager.loadModules();
   serverStatusService.start();
+
+  // Statistics use shard-local guild caches, with a lease unique to each shard.
+  if (redisClients) {
+    new LeaderElection({
+      redis: redisClients.primary,
+      key: `modus:leader:statistic-channels:shard-${shardId}`,
+      ownerId: `${process.pid}:shard-${shardId}`,
+      onAcquired: () => startStatisticChannels(moduleManager),
+      onLost: stopStatisticChannels,
+    }).start();
+  } else {
+    startStatisticChannels(moduleManager);
+  }
 
   // ── Recording retention ──────────────────────────────────────────────
   // Only one shard in the fleet should run this at a time — otherwise

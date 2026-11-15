@@ -42,6 +42,10 @@
       "types": "./src/stream-schedule.ts",
       "default": "./dist/stream-schedule.js"
     },
+    "./statistic-channels": {
+      "types": "./src/statistic-channels.ts",
+      "default": "./dist/statistic-channels.js"
+    },
     "./repositories/recordings": {
       "types": "./src/repositories/recordings.ts",
       "default": "./dist/repositories/recordings.js"

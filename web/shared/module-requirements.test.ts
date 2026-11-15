@@ -111,6 +111,13 @@ describe('getModuleNeeds', () => {
     expect(ids(verify)).toEqual(['vc'])
   })
 
+  it('statistic channels only require Manage Channels for enabled counters', () => {
+    expect(getModuleNeeds('statistic-channels', {})!.required).toEqual([])
+    const needs = getModuleNeeds('statistic-channels', { counters: [{ channelId: 'stat', enabled: true }, { channelId: 'paused', enabled: false }] })!
+    expect(needs.required).toEqual(['ManageChannels'])
+    expect(needs.channels).toEqual([{ id: 'stat', label: 'statistic voice channel', perms: ['ViewChannel', 'ManageChannels'] }])
+  })
+
   it('logging, xp: only the configured channel', () => {
     expect(ids(getModuleNeeds('logging', { auditChannelId: 'al' }))).toEqual(['al'])
     expect(ids(getModuleNeeds('xp', { announcementChannel: 'xp1' }))).toEqual(['xp1'])

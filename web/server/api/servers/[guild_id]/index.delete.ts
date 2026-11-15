@@ -18,6 +18,7 @@
  * them until the next manual sweep.
  */
 import { getRepos } from "../../../utils/db";
+import { StatisticConnectionRepository } from "@modus/db";
 import { requireGuildManager } from "../../../utils/session";
 import {
   deleteR2Object,
@@ -47,6 +48,9 @@ export default defineEventHandler(async (event) => {
       repos.guildConfigs.getModuleSettings(guildId, "welcome"),
     ]);
 
+    // Remove the private per-guild TikTok connection before discarding its settings.
+    // Do not revoke the provider grant globally; the account may be used by another guild.
+    await StatisticConnectionRepository.locked(repos.db, guildId, "tiktok", repo => repo.remove(guildId, "tiktok"));
     await repos.guildConfigs.deleteAllForGuild(guildId);
     await repos.servers.deleteByGuildId(guildId);
 

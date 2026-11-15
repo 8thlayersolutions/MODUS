@@ -90,6 +90,9 @@ export default defineNuxtConfig({
     twitchClientId: "", // NUXT_TWITCH_CLIENT_ID
     twitchClientSecret: "", // NUXT_TWITCH_CLIENT_SECRET
     twitchSyncEncryptionKey: "", // NUXT_TWITCH_SYNC_ENCRYPTION_KEY — 32-byte hex key // Set via NUXT_DISCORD_CLIENT_SECRET
+    tiktokClientKey: "",
+    tiktokClientSecret: "",
+    statisticEncryptionKey: "", // NUXT_STATISTIC_ENCRYPTION_KEY — 32-byte hex key
     // Session cookie lifetime. Without an explicit maxAge, h3 omits
     // Expires/Max-Age entirely, so `nuxt-session` is a browser-session
     // cookie and every browser restart forces a fresh Discord login.

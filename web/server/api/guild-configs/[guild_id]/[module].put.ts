@@ -12,7 +12,7 @@
 import { validateTwitchSyncSettings } from "@modus/db/twitch-sync";
 import { validateStreamSchedule } from "@modus/db/stream-schedule";
 import { clampRecordingBitrate } from "@modus/db/recording-limits";
-import { parseStaffListSettings } from "@modus/db";
+import { parseStaffListSettings, validateStatisticSettings } from "@modus/db";
 import { validateWelcomeImageElements } from "@modus/db/welcome-images";
 import { getRepos } from "../../../utils/db";
 import { requireModuleAccess } from "../../../utils/session";
@@ -87,6 +87,12 @@ export default defineEventHandler(async (event) => {
 
   if (moduleName.toLowerCase() === "staff-list" && body?.settings !== undefined) {
     body.settings = parseStaffListSettings(body.settings) as unknown as Record<string, any>;
+  }
+
+  if (moduleName.toLowerCase() === "statistic-channels" && body?.settings !== undefined) {
+    const result = validateStatisticSettings(body.settings);
+    if (!result.ok) throw createError({ statusCode: 400, statusMessage: result.error });
+    body.settings = result.settings;
   }
 
   if (moduleName.toLowerCase() === "stream-schedule" && body?.settings !== undefined) {
