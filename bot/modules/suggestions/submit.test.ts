@@ -16,6 +16,7 @@ const created: SuggestionRow = {
   channelId: null,
   messageId: null,
   threadId: null,
+  posts: [],
   createdAt: new Date("2026-10-02T12:00:00Z"),
 };
 
@@ -192,6 +193,37 @@ describe("submitSuggestion", () => {
     expect(result.ok).toBe(true);
     expect(result.ok && result.messageUrl).toBe("https://discord.com/channels/g1/c1/m1");
     expect(reportError).toHaveBeenCalledWith("thread", expect.any(Error));
+  });
+});
+
+describe("submitSuggestion across multiple channels", () => {
+  it("saves the primary and mirrors additional channel posts", async () => {
+    const addPost = vi.fn(async () => undefined);
+    const post = vi.fn(async (_suggestion: SuggestionRow, _payload: unknown, channelId?: string) => ({
+      channelId: channelId ?? "c1",
+      messageId: channelId === "c2" ? "m2" : "m1",
+    }));
+    const deps = makeDeps({ suggestions: {
+      create: vi.fn(async () => created),
+      setPost: vi.fn(async () => undefined),
+      addPost,
+      updatePostThread: vi.fn(async () => undefined),
+      deleteById: vi.fn(async () => undefined),
+    }, post });
+    const result = await submitSuggestion(deps, { ...input, channelIds: ["c1", "c2"], createThread: false });
+    expect(result.ok).toBe(true);
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(addPost).toHaveBeenCalledWith("sug-1", { channelId: "c2", messageId: "m2" });
+  });
+
+  it("keeps a successful suggestion when a secondary destination fails", async () => {
+    const deps = makeDeps({ post: vi.fn(async (_suggestion: SuggestionRow, _payload: unknown, channelId?: string) => {
+      if (channelId === "c2") throw new Error("Forbidden");
+      return { channelId: "c1", messageId: "m1" };
+    }) });
+    const result = await submitSuggestion(deps, { ...input, channelIds: ["c1", "c2"], createThread: false });
+    expect(result.ok).toBe(true);
+    expect(deps.suggestions.deleteById).not.toHaveBeenCalled();
   });
 });
 
