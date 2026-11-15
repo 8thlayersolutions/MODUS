@@ -19,6 +19,7 @@ import {
   type GuildMember,
 } from "discord.js";
 import type { APIInteractionGuildMember } from "discord.js";
+import { allSuggestionPosts } from "@modus/db";
 import { BotModule, ModuleManager } from "../../ModuleManager";
 import { buildSuggestionMessage, embedInputFromRow } from "./embed";
 import { deployPanel } from "./deploy";
@@ -227,12 +228,13 @@ async function submitFromModal(
 
   const deps: SubmitDeps = {
     suggestions: db.suggestions,
-    post: async (suggestion, payload) => {
-      const channel = await guildChannel(guild, settings.channelId!);
+    post: async (suggestion, payload, destinationChannelId) => {
+      const chosenChannelId = destinationChannelId ?? settings.channelIds[0]!;
+      const channel = await guildChannel(guild, chosenChannelId);
       const target = submitTarget(channel?.type);
       if (!channel || !target) {
         throw new Error(
-          `channel ${settings.channelId} is missing or is not a text, forum or media channel`,
+          `channel ${chosenChannelId} is missing or is not a text, forum or media channel`,
         );
       }
       if (target === "forum") {
@@ -342,6 +344,7 @@ async function submitFromModal(
     title,
     body,
     createThread: settings.createThread,
+    channelIds: settings.channelIds,
   });
 
   await interaction.editReply(
@@ -413,12 +416,28 @@ async function handleVoteButton(
       await interaction.reply({ content: outcome.content, flags: ephemeral });
       return;
     }
-    // The click's own response carries the new counts — no separate edit to rate-limit.
-    await interaction.update(
-      buildSuggestionMessage(
-        embedInputFromRow(outcome.suggestion, outcome.tally, gate.settings.closeVotingOnDecision),
-      ),
+    const payload = buildSuggestionMessage(
+      embedInputFromRow(outcome.suggestion, outcome.tally, gate.settings.closeVotingOnDecision),
     );
+    await interaction.update(payload);
+    // The vote is stored once; all copies display the same aggregate tally.
+    const guild = interaction.guild;
+    if (guild) {
+      for (const post of allSuggestionPosts(outcome.suggestion)) {
+        if (post.channelId === interaction.channelId && post.messageId === interaction.message?.id) continue;
+        try {
+          const channel = await guildChannel(guild, post.channelId);
+          if (!channel?.isSendable()) continue;
+          if (channel.isThread() && channel.archived && !channel.locked) await channel.setArchived(false);
+          await channel.messages.edit(post.messageId, payload);
+        } catch (error) {
+          void moduleManager.logger.warn(
+            `Could not sync vote to suggestion post ${post.messageId}: ${errMessage(error)}`,
+            guildId, MODULE,
+          );
+        }
+      }
+    }
   } catch (err) {
     if (!isStaleInteractionError(err)) {
       moduleManager.logger.error("Suggestion vote failed", guildId, err, MODULE);
@@ -470,28 +489,36 @@ async function reviewFromCommand(
     suggestions: db.suggestions,
     votes: db.suggestionVotes,
     editMessage: async (row, payload) => {
-      // No location yet means the submission is still in flight, not that the message is gone.
-      if (!row.channelId || !row.messageId) throw new Error("suggestion has no posted message yet");
-      const channel = await guildChannel(guild, row.channelId);
-      if (!channel || !channel.isSendable()) return "missing";
-      try {
-        // A forum suggestion's embed is its thread's starter message, and Discord refuses
-        // edits inside an archived thread. A locked thread stays a graceful failure.
-        if (channel.isThread() && channel.archived && !channel.locked) {
-          await channel.setArchived(false);
+      const posts = allSuggestionPosts(row);
+      if (!posts.length) throw new Error("suggestion has no posted message yet");
+      let updated = 0;
+      for (const post of posts) {
+        try {
+          const channel = await guildChannel(guild, post.channelId);
+          if (!channel?.isSendable()) continue;
+          if (channel.isThread() && channel.archived && !channel.locked) await channel.setArchived(false);
+          await channel.messages.edit(post.messageId, payload);
+          updated++;
+        } catch (error) {
+          if (!isUnknownMessage(error)) {
+            void moduleManager.logger.warn(
+              `Could not sync review to ${post.messageId}: ${errMessage(error)}`,
+              guild.id, MODULE,
+            );
+          }
         }
-        await channel.messages.edit(row.messageId, payload);
-        return "ok";
-      } catch (err) {
-        if (isUnknownMessage(err)) return "missing";
-        throw err;
       }
+      return updated ? "ok" : "missing";
     },
     postThreadNote: async (row, content) => {
-      if (!row.threadId) return;
-      const thread = await guildChannel(guild, row.threadId);
-      if (thread?.isSendable()) {
-        await thread.send({ content, allowedMentions: { parse: [] } });
+      for (const post of allSuggestionPosts(row)) {
+        if (!post.threadId) continue;
+        try {
+          const thread = await guildChannel(guild, post.threadId);
+          if (thread?.isSendable()) await thread.send({ content, allowedMentions: { parse: [] } });
+        } catch {
+          // A deleted/archived thread does not invalidate the review.
+        }
       }
     },
   };
@@ -714,7 +741,7 @@ function registerSuggestionsEvents(moduleManager: ModuleManager): void {
   client.on(Events.MessageDelete, async (message) => {
     try {
       if (!message.guildId) return;
-      await db.suggestions.markWithdrawnByMessage(message.guildId, message.id);
+      await db.suggestions.removeDeletedPost(message.guildId, message.channelId, message.id);
     } catch (err) {
       logger.error("Suggestions message-delete handler failed", message.guildId ?? undefined, err, MODULE);
     }
@@ -725,7 +752,9 @@ function registerSuggestionsEvents(moduleManager: ModuleManager): void {
     const guildId = channel.guildId;
     if (!guildId) return;
     try {
-      await db.suggestions.markWithdrawnByMessages(guildId, [...messages.keys()]);
+      for (const messageId of messages.keys()) {
+        await db.suggestions.removeDeletedPost(guildId, channel.id, messageId);
+      }
     } catch (err) {
       logger.error("Suggestions bulk-delete handler failed", guildId, err, MODULE);
     }
@@ -735,7 +764,7 @@ function registerSuggestionsEvents(moduleManager: ModuleManager): void {
     if (channel.isDMBased()) return;
     const guildId = channel.guildId;
     try {
-      await db.suggestions.markWithdrawnByChannel(guildId, channel.id);
+      await db.suggestions.removeDeletedPost(guildId, channel.id);
     } catch (err) {
       logger.error("Suggestions channel-delete handler failed", guildId, err, MODULE);
     }
@@ -744,7 +773,7 @@ function registerSuggestionsEvents(moduleManager: ModuleManager): void {
   // A forum suggestion IS its thread: deleting the post emits ThreadDelete (not ChannelDelete).
   client.on(Events.ThreadDelete, async (thread) => {
     try {
-      await db.suggestions.markWithdrawnByChannel(thread.guildId, thread.id);
+      await db.suggestions.removeDeletedPost(thread.guildId, thread.id);
     } catch (err) {
       logger.error("Suggestions thread-delete handler failed", thread.guildId, err, MODULE);
     }
