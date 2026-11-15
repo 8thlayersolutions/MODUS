@@ -1374,3 +1374,34 @@ export const applicationAudit = pgTable(
   },
   (t) => ({ bySubmission: index("application_audit_submission_idx").on(t.guildId, t.submissionId, t.createdAt) }),
 );
+
+
+// ── Twitch Sync authorization and grant tracking ──────────────────────
+export const twitchSyncBroadcasters = pgTable("twitch_sync_broadcasters", {
+  guildId: text("guild_id").primaryKey(),
+  twitchId: text("twitch_id").notNull(),
+  twitchLogin: text("twitch_login").notNull(),
+  encryptedToken: text("encrypted_token").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+export const twitchSyncMembers = pgTable("twitch_sync_members", {
+  guildId: text("guild_id").notNull(),
+  discordId: text("discord_id").notNull(),
+  twitchId: text("twitch_id").notNull(),
+  twitchLogin: text("twitch_login").notNull(),
+  encryptedToken: text("encrypted_token").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => ({
+  byGuildMember: primaryKey({ columns: [t.guildId, t.discordId] }),
+  byGuild: index("twitch_sync_members_guild_idx").on(t.guildId),
+}));
+export const twitchSyncGrants = pgTable("twitch_sync_grants", {
+  guildId: text("guild_id").notNull(),
+  discordId: text("discord_id").notNull(),
+  roleId: text("role_id").notNull(),
+  grantedAt: timestamp("granted_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => ({
+  byGuildMemberRole: primaryKey({ columns: [t.guildId, t.discordId, t.roleId] }),
+}));
