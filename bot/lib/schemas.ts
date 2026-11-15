@@ -663,8 +663,13 @@ export const SUGGESTION_PANEL_DEFAULTS = {
 export const SUGGESTION_PANEL_LIMITS = { title: 100, blurb: 1500, buttonLabel: 80 } as const;
 
 export const SuggestionsSettingsSchema = z.object({
-  /** Where suggestions are posted (text/announcement channel, or a forum/media channel); null until an admin picks one. */
+  /** Legacy primary destination, maintained for existing installations and panel compatibility. */
   channelId: z.string().min(1).nullable().default(null),
+  /** New destinations receive the same suggestion and share a vote/review record. */
+  channelIds: z.array(z.string().min(1)).max(25).refine(
+    (ids) => new Set(ids).size === ids.length,
+    "Suggestion channels must be unique",
+  ).default([]),
   staffRoleIds: z.array(z.string().min(1)).max(25).default([]),
   createThread: z.boolean().default(true),
   /** When on, `denied` and `implemented` suggestions stop accepting votes. */
