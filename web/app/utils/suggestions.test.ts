@@ -8,6 +8,7 @@ import {
   statusBadgeColor,
   statusLabel,
   storedPanelText,
+  storedSuggestionChannelIds,
   STATUS_TABS,
   STAFF_STATUS_OPTIONS,
   toSavedPanel,
@@ -174,5 +175,24 @@ describe("storedPanelText", () => {
   it("falls back when the trimmed value is over the limit", () => {
     expect(storedPanelText("t".repeat(101), 100, "Fallback")).toBe("Fallback");
     expect(storedPanelText(`  ${"t".repeat(100)}  `, 100, "Fallback")).toBe(`  ${"t".repeat(100)}  `);
+  });
+});
+
+describe("storedSuggestionChannelIds", () => {
+  it("restores the old single destination", () => {
+    expect(storedSuggestionChannelIds({ channelId: "123" })).toEqual(["123"]);
+  });
+  it("restores multiple destinations without duplicates", () => {
+    expect(storedSuggestionChannelIds({ channelId: "older", channelIds: ["a", "b", "a", ""] }))
+      .toEqual(["a", "b"]);
+  });
+  it("falls back to the legacy channel for an empty array", () => {
+    expect(storedSuggestionChannelIds({ channelId: "older", channelIds: [] })).toEqual(["older"]);
+  });
+  it("treats invalid config as unconfigured and caps selections at 25", () => {
+    expect(storedSuggestionChannelIds(undefined)).toEqual([]);
+    expect(storedSuggestionChannelIds({ channelIds: [null, 4] })).toEqual([]);
+    expect(storedSuggestionChannelIds({ channelIds: Array.from({ length: 30 }, (_, i) => String(i)) }))
+      .toHaveLength(25);
   });
 });

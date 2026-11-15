@@ -25,6 +25,7 @@
           <USelectMenu
             v-else-if="suggestionChannelOptions.length > 0"
             v-model="settings.channelIds"
+            :disabled="state.loading || saving"
             :items="suggestionChannelOptions"
             value-key="value"
             placeholder="Select channels…"
@@ -34,6 +35,8 @@
             class="w-full"
           />
           <p v-else class="py-1.5 text-sm italic text-gray-500">No channels available.</p>
+          <p v-if="state.loading" class="mt-1.5 text-[13px] text-gray-400">Loading saved channel selections…</p>
+          <p v-else class="mt-1.5 text-[13px] text-gray-400">{{ settings.channelIds.length }} of {{ MAX_SUGGESTION_CHANNELS }} channels selected.</p>
         </UFormField>
 
         <UFormField
@@ -346,6 +349,7 @@ import {
   statusBadgeColor,
   statusLabel,
   storedPanelText,
+  storedSuggestionChannelIds,
   toSavedPanel,
   validatePanel,
   validateReview,
@@ -570,12 +574,18 @@ async function postPanel() {
 
 // ── Init ─────────────────────────────────────────────────────────────
 
-onMounted(async () => {
-  const saved = getModuleConfig("suggestions");
-  if (saved) {
-    settings.channelIds = Array.isArray(saved.channelIds) && saved.channelIds.length
-      ? saved.channelIds.filter((id: unknown): id is string => typeof id === "string")
-      : typeof saved.channelId === "string" ? [saved.channelId] : [];
+// Parent dashboard loads guild configs asynchronously. Reading getModuleConfig
+// in onMounted can race that fetch and incorrectly show empty selections.
+// Hydrate exactly once after the initial load finishes, without overwriting
+// edits or the baseline when the config is subsequently refetched.
+const settingsHydrated = ref(false);
+watch(
+  () => state.value.loading,
+  (loading) => {
+    if (loading || settingsHydrated.value) return;
+    settingsHydrated.value = true;
+    const saved = getModuleConfig("suggestions");
+    settings.channelIds = storedSuggestionChannelIds(saved);
     settings.channelId = settings.channelIds[0] ?? "";
     settings.staffRoleIds = Array.isArray(saved.staffRoleIds) ? saved.staffRoleIds : [];
     settings.createThread = saved.createThread ?? true;
@@ -589,9 +599,13 @@ onMounted(async () => {
     );
     settings.panelChannelId = typeof saved.panelChannelId === "string" ? saved.panelChannelId : "";
     settings.panelMessageId = typeof saved.panelMessageId === "string" ? saved.panelMessageId : "";
-  }
-  panelTarget.value = settings.panelChannelId;
-  baseline.value = JSON.stringify(settings);
+    panelTarget.value = settings.panelChannelId;
+    baseline.value = JSON.stringify(settings);
+  },
+  { immediate: true },
+);
+
+onMounted(async () => {
   await Promise.all([loadChannels(), loadRoles(), loadSuggestionChannels()]);
 });
 </script>

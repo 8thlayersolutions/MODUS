@@ -84,7 +84,23 @@ export default defineEventHandler(async (event) => {
 
   const limit = Math.min(Math.max(Number.parseInt(limitParam, 10) || 25, 1), 50);
 
-  const rows = await repos.suggestions.list(guildId, { status, limit, before });
+  let rows;
+  try {
+    rows = await repos.suggestions.list(guildId, { status, limit, before });
+  } catch (error: unknown) {
+    const dbError = error as { code?: string; cause?: { code?: string } };
+    // A new dashboard image can be deployed before the bot has migrated the
+    // shared Postgres schema. Tell the administrator what to fix instead of
+    // returning an unexplained 500 for the entire review queue.
+    if (["42703", "42P01"].includes(dbError.code ?? dbError.cause?.code ?? "")) {
+      throw createError({
+        statusCode: 503,
+        statusMessage:
+          "Suggestions database schema is not ready. Redeploy the MODUS bot to apply pending database migrations.",
+      });
+    }
+    throw error;
+  }
   const tallies = await repos.suggestionVotes.tallies(rows.map((r) => r.id));
 
   const identities = await fetchGuildMemberIdentities(
