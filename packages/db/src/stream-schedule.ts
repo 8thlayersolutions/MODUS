@@ -28,7 +28,31 @@ export const DEFAULT_SCHEDULE_APPEARANCE: StreamScheduleAppearance = {
   muted: "#b2a6c4", layout: "grid", compact: false,
   showOff: true, header: true, images: true,
 };
+export interface DiscordScheduleSettings {
+  /** Target text or announcement channel. Posting is always opt-in. */
+  channelId: string;
+  autoUpdate: boolean;
+  title: string;
+  description: string;
+  color: string;
+  imageUrl: string;
+  footer: string;
+  showOffDays: boolean;
+  inlineFields: boolean;
+}
+export const DEFAULT_DISCORD_SCHEDULE: DiscordScheduleSettings = {
+  channelId: "",
+  autoUpdate: true,
+  title: "",
+  description: "",
+  color: "#9146FF",
+  imageUrl: "",
+  footer: "Schedule subject to change • Powered by MODUS",
+  showOffDays: true,
+  inlineFields: false,
+};
 export interface StreamScheduleSettings {
+  discord: DiscordScheduleSettings;
   appearance: StreamScheduleAppearance;
   title: string;
   description: string;
@@ -63,6 +87,7 @@ export const DEFAULT_STREAM_SCHEDULE: StreamScheduleSettings = {
   twitchChannel: "",
   public: false,
   appearance: { ...DEFAULT_SCHEDULE_APPEARANCE },
+  discord: { ...DEFAULT_DISCORD_SCHEDULE },
   weekly: [],
   overrides: [],
 };
@@ -158,6 +183,33 @@ export function validateStreamSchedule(input: unknown):
       if (typeof value !== "boolean") throw new Error("Invalid appearance flag " + key);
       appearance[key] = value;
     }
+    const rawDiscord = input.discord ?? {};
+    if (!isObject(rawDiscord)) throw new Error("Invalid Discord embed settings");
+    const channelId = stringField(rawDiscord.channelId ?? "", 22, "Discord channel");
+    if (channelId && !/^\d{16,22}$/.test(channelId)) {
+      throw new Error("Invalid Discord channel ID");
+    }
+    const discordColor = stringField(rawDiscord.color ?? "#9146FF", 7, "Discord embed color");
+    if (!/^#[0-9a-fA-F]{6}$/.test(discordColor)) {
+      throw new Error("Invalid Discord embed color");
+    }
+    const autoUpdate = rawDiscord.autoUpdate ?? true;
+    const showOffDays = rawDiscord.showOffDays ?? true;
+    const inlineFields = rawDiscord.inlineFields ?? false;
+    if ([autoUpdate, showOffDays, inlineFields].some((v) => typeof v !== "boolean")) {
+      throw new Error("Invalid Discord embed option");
+    }
+    const discord: DiscordScheduleSettings = {
+      channelId,
+      autoUpdate: autoUpdate as boolean,
+      title: stringField(rawDiscord.title ?? "", 200, "Discord embed title"),
+      description: stringField(rawDiscord.description ?? "", 600, "Discord embed description"),
+      color: discordColor,
+      imageUrl: validUrl(rawDiscord.imageUrl, "Discord embed banner URL"),
+      footer: stringField(rawDiscord.footer ?? DEFAULT_DISCORD_SCHEDULE.footer, 512, "Discord embed footer"),
+      showOffDays: showOffDays as boolean,
+      inlineFields: inlineFields as boolean,
+    };
     const rawWeekly = input.weekly ?? [];
     const rawOverrides = input.overrides ?? [];
     if (!Array.isArray(rawWeekly) || rawWeekly.length > 35) throw new Error("Up to 35 weekly streams allowed");
@@ -182,14 +234,14 @@ export function validateStreamSchedule(input: unknown):
       }
       return { date: v.date as string, mode: v.mode as "off" | "replace", streams };
     });
-    return { ok: true, settings: { title, description, timezone, weekStartsOn, twitchChannel, public: publish, appearance, weekly, overrides } };
+    return { ok: true, settings: { title, description, timezone, weekStartsOn, twitchChannel, public: publish, appearance, discord, weekly, overrides } };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Invalid schedule" };
   }
 }
 export function normalizeStreamSchedule(input: unknown): StreamScheduleSettings {
   const validated = validateStreamSchedule(input);
-  return validated.ok ? validated.settings : { ...DEFAULT_STREAM_SCHEDULE, appearance: { ...DEFAULT_SCHEDULE_APPEARANCE }, weekly: [], overrides: [] };
+  return validated.ok ? validated.settings : { ...DEFAULT_STREAM_SCHEDULE, appearance: { ...DEFAULT_SCHEDULE_APPEARANCE }, discord: { ...DEFAULT_DISCORD_SCHEDULE }, weekly: [], overrides: [] };
 }
 export function shiftCalendarDate(iso: string, days: number): string {
   const d = new Date(iso + "T12:00:00.000Z");
@@ -250,4 +302,70 @@ export function buildStreamWeek(settings: StreamScheduleSettings, now = new Date
     return { date, weekday, overridden: Boolean(override), off: resolved.length === 0, streams: resolved };
   });
   return { startDate, endDate: days[6].date, days };
+}
+
+/**
+ * Discord API-compatible embed used by the dashboard publisher, /schedule,
+ * and the bot's recurring updater. Keep rendering deterministic so the
+ * publisher updates the same message only when the week or content changes.
+ */
+export interface DiscordStreamEmbed {
+  title: string;
+  description: string;
+  color: number;
+  fields: { name: string; value: string; inline: boolean }[];
+  image?: { url: string };
+  footer?: { text: string };
+}
+export interface DiscordStreamMessage {
+  embeds: DiscordStreamEmbed[];
+  allowed_mentions: { parse: [] };
+}
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const clipDiscord = (s: string, max: number) =>
+  s.length <= max ? s : s.slice(0, max - 1).trimEnd() + "…";
+const escapeDiscord = (s: string): string =>
+  s.replace(/[\\*_~|]/g, "\\$&").replace(/@/g, "@\u200b");
+function linkForDiscord(url: string): string {
+  // <url> inside a markdown link avoids ')' in normal URLs breaking the link.
+  // Reject angle brackets; usernames/roles must never be interpolated in links.
+  return /^https:\/\/[^\s<>]+$/i.test(url) ? "[Watch](<" + url + ">)" : "";
+}
+export function buildDiscordStreamMessage(
+  settings: StreamScheduleSettings,
+  now = new Date(),
+  weekOffset = 0,
+): DiscordStreamMessage {
+  const config = settings.discord;
+  const week = buildStreamWeek(settings, now, weekOffset);
+  const description = [
+    config.description || settings.description,
+    "📅 " + week.startDate + " — " + week.endDate,
+    "🕐 " + settings.timezone + " • Times auto-convert in Discord",
+  ].filter(Boolean).join("\n");
+  const fields = week.days.filter(day => config.showOffDays || !day.off).map(day => {
+    const lines = day.streams.map(stream => {
+      const time = stream.startsAt
+        ? "<t:" + Math.floor(new Date(stream.startsAt).getTime() / 1000) + ":t>"
+        : escapeDiscord(stream.time) + " (local)";
+      const info = "**" + escapeDiscord(stream.title) + "**" +
+        (stream.game ? " • " + escapeDiscord(stream.game) : "");
+      const link = linkForDiscord(stream.url);
+      return time + " — " + info + (link ? " • " + link : "");
+    });
+    return {
+      name: DAY_NAMES[day.weekday] + " • " + day.date,
+      value: clipDiscord(lines.length ? lines.join("\n") : "No stream scheduled", 650),
+      inline: config.inlineFields,
+    };
+  });
+  const embed: DiscordStreamEmbed = {
+    title: clipDiscord(config.title || settings.title || "Stream Schedule", 256),
+    description: clipDiscord(description, 1100),
+    color: parseInt(config.color.slice(1), 16),
+    fields,
+  };
+  if (config.imageUrl) embed.image = { url: config.imageUrl };
+  if (config.footer) embed.footer = { text: config.footer };
+  return { embeds: [embed], allowed_mentions: { parse: [] } };
 }

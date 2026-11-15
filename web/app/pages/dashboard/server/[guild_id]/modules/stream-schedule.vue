@@ -195,6 +195,137 @@
         </div>
       </DashboardModuleSection>
 
+      <DashboardModuleSection
+        title="Discord Schedule Embed"
+        description="Post a permanent schedule message in a channel. MODUS edits that same message as the week rolls forward or your schedule changes."
+      >
+        <div class="grid gap-4 sm:grid-cols-2">
+          <label class="space-y-1 text-sm text-gray-300">
+            <span class="block">Post in Discord channel</span>
+            <select v-model="settings.discord.channelId" class="input" :disabled="state.channelsLoading">
+              <option value="">Select a text channel…</option>
+              <option v-for="channel in discordChannels" :key="channel.id" :value="channel.id">
+                #{{ channel.name }}
+              </option>
+            </select>
+            <span v-if="state.channelsLoading" class="text-xs text-gray-500">Loading channels…</span>
+          </label>
+          <label class="space-y-1 text-sm text-gray-300">
+            <span class="block">Embed title (optional override)</span>
+            <input v-model="settings.discord.title" maxlength="200" class="input" placeholder="Uses display title" />
+          </label>
+          <label class="space-y-1 text-sm text-gray-300 sm:col-span-2">
+            <span class="block">Description (optional override)</span>
+            <textarea v-model="settings.discord.description" maxlength="600" rows="2" class="input" placeholder="Uses schedule subtitle" />
+          </label>
+          <label class="space-y-1 text-sm text-gray-300">
+            <span class="block">Embed accent color</span>
+            <div class="flex items-center gap-2">
+              <input v-model="settings.discord.color" type="color" class="h-10 w-12 rounded bg-transparent" />
+              <input v-model="settings.discord.color" maxlength="7" class="input min-w-0 flex-1 font-mono" />
+            </div>
+          </label>
+          <label class="space-y-1 text-sm text-gray-300">
+            <span class="block">Banner image URL (optional)</span>
+            <input v-model="settings.discord.imageUrl" type="url" class="input" placeholder="https://example.com/schedule.png" />
+          </label>
+          <label class="space-y-1 text-sm text-gray-300 sm:col-span-2">
+            <span class="block">Footer</span>
+            <input v-model="settings.discord.footer" maxlength="512" class="input" placeholder="Powered by MODUS" />
+          </label>
+        </div>
+        <div class="mt-4 flex flex-wrap gap-x-6 gap-y-3 text-sm text-gray-300">
+          <label class="flex items-center gap-2">
+            <input v-model="settings.discord.autoUpdate" type="checkbox" />
+            Automatically update every 5 minutes
+          </label>
+          <label class="flex items-center gap-2">
+            <input v-model="settings.discord.showOffDays" type="checkbox" />
+            Include off-days
+          </label>
+          <label class="flex items-center gap-2">
+            <input v-model="settings.discord.inlineFields" type="checkbox" />
+            Compact inline day fields
+          </label>
+        </div>
+
+        <div class="mt-6 space-y-2">
+          <p class="text-sm font-medium text-white">Discord embed preview</p>
+          <div class="max-w-2xl rounded-lg bg-[#2b2d31] p-4">
+            <div class="rounded-r-md bg-[#202127] p-4 text-[#dbdee1] shadow-sm"
+                 :style="{ borderLeft: '4px solid ' + validDiscordColor }">
+              <p class="text-base font-semibold text-white">{{ settings.discord.title || settings.title }}</p>
+              <p v-if="settings.discord.description || settings.description" class="mt-2 whitespace-pre-wrap text-sm">
+                {{ settings.discord.description || settings.description }}
+              </p>
+              <p class="mt-2 text-xs text-gray-400">{{ preview.startDate }} — {{ preview.endDate }} · {{ settings.timezone }}</p>
+              <div class="mt-4 grid gap-3" :class="settings.discord.inlineFields ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-1'">
+                <div v-for="day in discordPreviewDays" :key="day.date" class="min-w-0">
+                  <div class="text-xs font-semibold text-white">
+                    {{ weekdayOptions[day.weekday]?.label }} · {{ day.date.slice(5) }}
+                  </div>
+                  <p v-if="day.off" class="mt-1 text-xs text-gray-400">No stream scheduled</p>
+                  <div v-for="stream in day.streams" :key="stream.id" class="mt-1 text-xs">
+                    <span class="text-gray-300">{{ stream.time }}</span> · <strong>{{ stream.title }}</strong>
+                    <span v-if="stream.game" class="text-gray-400"> · {{ stream.game }}</span>
+                  </div>
+                </div>
+              </div>
+              <img
+                v-if="settings.discord.imageUrl && /^https:\/\//i.test(settings.discord.imageUrl)"
+                :src="settings.discord.imageUrl"
+                class="mt-4 max-h-52 max-w-full rounded object-contain"
+                alt="Discord schedule banner"
+                loading="lazy"
+              />
+              <p v-if="settings.discord.footer" class="mt-4 text-xs text-gray-400">{{ settings.discord.footer }}</p>
+            </div>
+          </div>
+          <p class="text-xs text-gray-400">
+            The actual Discord message uses timestamp links that convert to each viewer's local time.
+            No role or everyone mentions are sent automatically.
+          </p>
+        </div>
+
+        <div class="mt-5 flex flex-wrap items-center gap-3">
+          <UButton
+            icon="i-lucide-send"
+            :loading="publishing"
+            :disabled="!settings.discord.channelId || !isModuleEnabled('stream-schedule')"
+            @click="publishDiscord"
+          >
+            {{ publication.published ? "Update Published Embed" : "Save & Publish Embed" }}
+          </UButton>
+          <UButton
+            v-if="publication.published"
+            color="error"
+            variant="soft"
+            icon="i-lucide-trash-2"
+            :loading="publishing"
+            @click="unpublishDiscord"
+          >
+            Remove Published Embed
+          </UButton>
+          <UButton
+            v-if="publication.messageUrl"
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-external-link"
+            :to="publication.messageUrl"
+            target="_blank"
+          >
+            Open in Discord
+          </UButton>
+        </div>
+        <p v-if="publication.published" class="mt-3 text-xs text-emerald-300">
+          Published to #{{ discordChannels.find(c => c.id === publication.channelId)?.name || publication.channelId }}.
+          Automatic updates {{ settings.discord.autoUpdate ? 'enabled' : 'disabled' }}.
+        </p>
+        <p v-else class="mt-3 text-xs text-gray-500">
+          Nothing has been posted yet. Your channel won't receive a message until you click Save & Publish Embed.
+        </p>
+      </DashboardModuleSection>
+
       <DashboardModuleSection title="Embed on Your Website" description="Paste the iframe code into an Elementor HTML widget. It reloads itself every five minutes and follows the calendar automatically.">
         <div class="space-y-3">
           <p v-if="!settings.public" class="rounded-lg border border-amber-400/20 bg-amber-400/5 p-3 text-sm text-amber-200">
@@ -234,10 +365,25 @@ import {
 } from "@modus/db/stream-schedule";
 
 const guildId = String(useRoute().params.guild_id);
-const { initialize, isModuleEnabled, saveModuleSettings } = useServerSettings(guildId);
+const { initialize, isModuleEnabled, saveModuleSettings, loadChannels, state } = useServerSettings(guildId);
 const toast = useToast();
 const loading = ref(true);
 const saving = ref(false);
+const publishing = ref(false);
+type DiscordPublication = {
+  published: boolean;
+  channelId: string;
+  messageId: string;
+  messageUrl: string;
+  updatedAt: string | null;
+};
+const publication = ref<DiscordPublication>({
+  published: false, channelId: "", messageId: "", messageUrl: "", updatedAt: null,
+});
+const discordChannels = computed(() => state.value.channels.filter(c => c.type === 0 || c.type === 5));
+const validDiscordColor = computed(() =>
+  /^#[0-9a-fA-F]{6}$/.test(settings.value.discord.color)
+    ? settings.value.discord.color : "#9146FF");
 const errorMessage = ref("");
 const settings = ref<StreamScheduleSettings>(normalizeStreamSchedule(DEFAULT_STREAM_SCHEDULE));
 const overrideDate = ref("");
@@ -262,6 +408,8 @@ const themeColors: { key: ColorKey; label: string }[] = [
   { key: "muted", label: "Secondary text" },
 ];
 const sortedOverrides = computed(() => [...settings.value.overrides].sort((a, b) => a.date.localeCompare(b.date)));
+const discordPreviewDays = computed(() =>
+  preview.value.days.filter(day => settings.value.discord.showOffDays || !day.off));
 const preview = computed(() => {
   const valid = validateStreamSchedule(settings.value);
   return buildStreamWeek(valid.ok ? valid.settings : normalizeStreamSchedule({}), new Date());
@@ -322,17 +470,61 @@ async function copyEmbed() {
     toast.add({ title: "Copy unavailable", description: "Select the code and copy it manually.", color: "warning" });
   }
 }
-async function save() {
+async function fetchDiscordPublication() {
+  publication.value = await $fetch<DiscordPublication>("/api/stream-schedule/discord", {
+    params: { guild_id: guildId },
+  });
+}
+async function publishDiscord() {
+  publishing.value = true;
+  errorMessage.value = "";
+  try {
+    const ok = await save();
+    if (!ok) return;
+    await $fetch("/api/stream-schedule/discord", {
+      method: "POST",
+      body: { guildId, action: "publish" },
+    });
+    await fetchDiscordPublication();
+    toast.add({
+      title: "Schedule published in Discord",
+      description: "MODUS will keep the same message updated.",
+      color: "success",
+    });
+  } catch (error: any) {
+    errorMessage.value = error?.data?.statusMessage || "Unable to publish the Discord embed.";
+  } finally {
+    publishing.value = false;
+  }
+}
+async function unpublishDiscord() {
+  publishing.value = true;
+  errorMessage.value = "";
+  try {
+    await $fetch("/api/stream-schedule/discord", {
+      method: "POST",
+      body: { guildId, action: "unpublish" },
+    });
+    await fetchDiscordPublication();
+    toast.add({ title: "Discord schedule removed", color: "success" });
+  } catch (error: any) {
+    errorMessage.value = error?.data?.statusMessage || "Could not remove the Discord message.";
+  } finally {
+    publishing.value = false;
+  }
+}
+async function save(): Promise<boolean> {
   const checked = validateStreamSchedule(settings.value);
   if (!checked.ok) {
     errorMessage.value = checked.error;
-    return;
+    return false;
   }
   saving.value = true;
   errorMessage.value = "";
   try {
     const ok = await saveModuleSettings("stream-schedule", checked.settings);
     if (ok) settings.value = checked.settings;
+    return ok;
   } finally {
     saving.value = false;
   }
@@ -344,6 +536,7 @@ onMounted(async () => {
       "/api/guild-configs/" + encodeURIComponent(guildId) + "/stream-schedule",
     );
     settings.value = normalizeStreamSchedule(config.settings);
+    await Promise.all([loadChannels(), fetchDiscordPublication()]);
   } catch {
     errorMessage.value = "Could not load the current schedule. Changes have not been saved.";
   } finally {

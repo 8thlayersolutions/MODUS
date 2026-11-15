@@ -28,3 +28,52 @@ describe("stream-schedule", () => {
   expect(buildStreamWeek(s,new Date("2026-03-14T12:00:00Z")).days[0].streams[0].startsAt).toBe("2026-03-17T00:00:00.000Z");
  });
 });
+
+describe("Discord schedule embed", () => {
+  it("adds safe defaults for older guild settings", () => {
+    const result = normalizeStreamSchedule(sample());
+    expect(result.discord.channelId).toBe("");
+    expect(result.discord.autoUpdate).toBe(true);
+    expect(result.discord.showOffDays).toBe(true);
+  });
+  it("rejects invalid channel IDs and non-HTTPS banner images", () => {
+    expect(validateStreamSchedule({ ...sample(), discord: { channelId: "other-guild" } }).ok).toBe(false);
+    expect(validateStreamSchedule({ ...sample(), discord: { imageUrl: "javascript:alert(1)" } }).ok).toBe(false);
+  });
+  it("renders seven Discord day fields with local timestamp markup", async () => {
+    const { buildDiscordStreamMessage } = await import("./stream-schedule");
+    const settings = normalizeStreamSchedule(sample());
+    const payload = buildDiscordStreamMessage(settings, new Date("2026-11-14T18:00:00Z"));
+    expect(payload.embeds[0].fields).toHaveLength(7);
+    expect(payload.embeds[0].fields[6].value).toContain("<t:1794790800:t>");
+    expect(payload.allowed_mentions.parse).toEqual([]);
+  });
+  it("supports off-day hiding and custom appearance", async () => {
+    const { buildDiscordStreamMessage } = await import("./stream-schedule");
+    const settings = normalizeStreamSchedule({
+      ...sample(),
+      discord: {
+        title: "CHAOS HQ WEEKLY",
+        color: "#9A46FF",
+        imageUrl: "https://example.com/image.png",
+        showOffDays: false,
+        inlineFields: true,
+      },
+    });
+    const payload = buildDiscordStreamMessage(settings, new Date("2026-11-14T18:00:00Z"));
+    expect(payload.embeds[0].title).toBe("CHAOS HQ WEEKLY");
+    expect(payload.embeds[0].color).toBe(0x9A46FF);
+    expect(payload.embeds[0].image?.url).toBe("https://example.com/image.png");
+    expect(payload.embeds[0].fields).toHaveLength(1);
+    expect(payload.embeds[0].fields[0].inline).toBe(true);
+  });
+  it("escapes mass mentions in stream titles", async () => {
+    const { buildDiscordStreamMessage } = await import("./stream-schedule");
+    const settings = normalizeStreamSchedule({
+      ...sample(),
+      weekly: [{ ...sample().weekly[0], title: "@everyone party" }],
+    });
+    const payload = buildDiscordStreamMessage(settings, new Date("2026-11-14T18:00:00Z"));
+    expect(payload.embeds[0].fields[6].value).not.toContain("@everyone");
+  });
+});
