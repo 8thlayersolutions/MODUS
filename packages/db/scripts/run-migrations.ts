@@ -11,6 +11,7 @@ if (!connectionString) {
 runMigrations({
   connectionString,
   directory: resolve(__dirname, "../migrations"),
+  drizzleDirectory: resolve(__dirname, "../drizzle"),
 }).catch((error) => {
   console.error("[migrations] failed:", error);
   process.exitCode = 1;
