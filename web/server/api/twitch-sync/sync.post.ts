@@ -58,7 +58,10 @@ export default defineEventHandler(async event => {
     }).toString();
   // Editors API has no user_id filter; fetch once for the entire guild run.
   // If it fails, abort the entire run: never infer a lack of permission.
-  const editors = await $fetch<TwitchResponse>(twitchUrl("channels/editors", {}), { headers: twitchHeaders });
+  const shouldCheck = (type: string) => !!settings.mappings[type as keyof typeof settings.mappings];
+  const editors = shouldCheck("editor")
+    ? await $fetch<TwitchResponse>(twitchUrl("channels/editors", {}), { headers: twitchHeaders })
+    : { data: [] };
   const editorIds = new Set(editors.data.map(entry => entry.user_id));
   let verified = 0, assigned = 0, removed = 0, failed = 0;
   const linkedMembers = await repos.twitchSync.listMembers(guildId);
@@ -88,11 +91,15 @@ export default defineEventHandler(async event => {
         if (connection.id === broadcaster.twitchId) statuses.add("broadcaster");
         if (editorIds.has(connection.id)) statuses.add("editor");
         // All four endpoint responses must succeed. A Twitch HTTP error is NOT a negative role check.
+        const subsEnabled = ["subscriber", "tier1", "tier2", "tier3"].some(shouldCheck);
+        const checked = (enabled: boolean, path: string) => enabled
+          ? $fetch<TwitchResponse>(twitchUrl(path, { user_id: connection.id }), { headers: twitchHeaders })
+          : Promise.resolve({ data: [] } as TwitchResponse);
         const [mods, vips, followers, subs] = await Promise.all([
-          $fetch<TwitchResponse>(twitchUrl("moderation/moderators", { user_id: connection.id }), { headers: twitchHeaders }),
-          $fetch<TwitchResponse>(twitchUrl("channels/vips", { user_id: connection.id }), { headers: twitchHeaders }),
-          $fetch<TwitchResponse>(twitchUrl("channels/followers", { user_id: connection.id }), { headers: twitchHeaders }),
-          $fetch<TwitchResponse>(twitchUrl("subscriptions", { user_id: connection.id }), { headers: twitchHeaders }),
+          checked(shouldCheck("moderator"), "moderation/moderators"),
+          checked(shouldCheck("vip"), "channels/vips"),
+          checked(shouldCheck("follower"), "channels/followers"),
+          checked(subsEnabled, "subscriptions"),
         ]);
         if (mods.data.some(entry => entry.user_id === connection.id)) statuses.add("moderator");
         if (vips.data.some(entry => entry.user_id === connection.id)) statuses.add("vip");
