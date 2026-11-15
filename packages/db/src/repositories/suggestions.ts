@@ -100,6 +100,17 @@ export class SuggestionRepository {
       .where(eq(suggestions.id, id));
   }
 
+  async updatePostThread(id: string, messageId: string, threadId: string): Promise<void> {
+    await this.db.update(suggestions)
+      .set({ posts: sql`(
+        SELECT coalesce(jsonb_agg(CASE WHEN p->>'messageId' = ${messageId}
+          THEN jsonb_set(p, '{threadId}', to_jsonb(${threadId}::text))
+          ELSE p END), '[]'::jsonb)
+        FROM jsonb_array_elements(${suggestions.posts}) p
+      )` })
+      .where(eq(suggestions.id, id));
+  }
+
   /** Remove a deleted copy and withdraw only when no copies remain. */
   async removeDeletedPost(guildId: string, channelId: string, messageId?: string): Promise<number> {
     const rows = await this.db.select().from(suggestions)
