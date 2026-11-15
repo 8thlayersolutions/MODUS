@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.40.0](https://github.com/8thlayersolutions/MODUS/compare/modus-v1.39.0...modus-v1.40.0) (2026-11-15)
+
+
+### ✨ Features
+
+* **stream-schedule:** configurable Discord embed with automatic updates ([a088945](https://github.com/8thlayersolutions/MODUS/commit/a08894583536fec908376011c3a2e162d46dfc03))
+
 ## [1.39.0](https://github.com/8thlayersolutions/MODUS/compare/modus-v1.38.0...modus-v1.39.0) (2026-11-15)
 
 
