@@ -8,7 +8,7 @@ import {
   activeTwitchToken, decryptTokens, encryptTokens, refreshDiscordMember,
   discordTwitchConnection, requireTwitchConfig,
 } from "../../utils/twitch-sync";
-import { parseTwitchSyncSettings, TWITCH_ROLE_TYPES } from "@modus/db/twitch-sync";
+import { parseTwitchSyncSettings, TWITCH_ROLE_TYPES, planTwitchRoleChanges } from "@modus/db/twitch-sync";
 
 interface DiscordMember { roles: string[]; user?: { id: string } }
 interface DiscordRole { id: string; managed: boolean; position: number }
@@ -114,25 +114,25 @@ export default defineEventHandler(async event => {
       }
       // Role mapping applies a union: a role linked to multiple statuses is
       // retained if ANY one qualifying status still matches.
-      const desired = new Set(verifiedTypes
-        .filter(type => statuses.has(type))
-        .map(type => settings.mappings[type])
-        .filter(roleId => roleId && grantable.has(roleId)));
       const current = new Set(member.roles);
       const grants = await repos.twitchSync.getGrants(guildId, link.discordId);
+      const plan = planTwitchRoleChanges({
+        settings,
+        verifiedStatuses: statuses,
+        grantableRoleIds: grantable,
+        heldRoleIds: current,
+        recordedGrantRoleIds: new Set(grants.map(grant => grant.roleId)),
+      });
       // Do not record roles already present; they may have been assigned manually.
-      for (const roleId of desired) {
-        if (!current.has(roleId)) {
-          await $fetch(guildUrl + "/members/" + link.discordId + "/roles/" + roleId, {
-            method: "PUT", headers: discordHeaders,
-          });
-          await repos.twitchSync.addGrant(guildId, link.discordId, roleId);
-          assigned++;
-        }
+      for (const roleId of plan.toGrant) {
+        await $fetch(guildUrl + "/members/" + link.discordId + "/roles/" + roleId, {
+          method: "PUT", headers: discordHeaders,
+        });
+        await repos.twitchSync.addGrant(guildId, link.discordId, roleId);
+        assigned++;
       }
       for (const grant of grants) {
-        if (desired.has(grant.roleId) || !grantable.has(grant.roleId)) continue;
-        if (!settings.removeStaleRoles) continue;
+        if (!plan.toRevoke.includes(grant.roleId)) continue;
         if (current.has(grant.roleId)) {
           await $fetch(guildUrl + "/members/" + link.discordId + "/roles/" + grant.roleId, {
             method: "DELETE", headers: discordHeaders,

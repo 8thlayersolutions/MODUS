@@ -97,3 +97,28 @@ export function validateTwitchSyncSettings(input: unknown):
   }
   return { ok: true, settings: parseTwitchSyncSettings(input) };
 }
+
+
+/** Pure policy layer: only API-verifiable statuses may confer automatic roles. */
+export function planTwitchRoleChanges(input: {
+  settings: TwitchSyncSettings;
+  verifiedStatuses: ReadonlySet<string>;
+  grantableRoleIds: ReadonlySet<string>;
+  heldRoleIds: ReadonlySet<string>;
+  recordedGrantRoleIds: ReadonlySet<string>;
+}): { desired: string[]; toGrant: string[]; toRevoke: string[] } {
+  const desired = [...new Set(TWITCH_ROLE_TYPES
+    .filter(type => type.automatic && input.verifiedStatuses.has(type.id))
+    .map(type => input.settings.mappings[type.id])
+    .filter(roleId => !!roleId && input.grantableRoleIds.has(roleId)))];
+  const desiredSet = new Set(desired);
+  return {
+    desired,
+    toGrant: desired.filter(roleId => !input.heldRoleIds.has(roleId)),
+    // Revocation is restricted to IDs recorded when MODUS itself assigned the role.
+    toRevoke: input.settings.removeStaleRoles
+      ? [...input.recordedGrantRoleIds].filter(roleId =>
+        !desiredSet.has(roleId) && input.grantableRoleIds.has(roleId))
+      : [],
+  };
+}
