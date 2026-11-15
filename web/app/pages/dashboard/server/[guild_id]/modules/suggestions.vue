@@ -261,6 +261,21 @@
           <p class="text-[13px] text-gray-400">
             Submitted by {{ target.authorName }} · ▲ {{ target.up }} · ▼ {{ target.down }}
           </p>
+          <div v-if="target.posts?.length" class="flex flex-wrap gap-2">
+            <UButton
+              v-for="post in target.posts"
+              :key="post.messageId"
+              :to="messageLink(guildId, post.channelId, post.messageId)!"
+              target="_blank"
+              rel="noopener noreferrer"
+              color="neutral"
+              variant="soft"
+              size="xs"
+              icon="i-lucide-external-link"
+            >
+              View in channel
+            </UButton>
+          </div>
 
           <div>
             <span class="mb-1.5 block text-sm font-medium text-white">Voters</span>
