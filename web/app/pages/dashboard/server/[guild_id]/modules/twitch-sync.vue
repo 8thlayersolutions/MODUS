@@ -27,11 +27,11 @@
     <DashboardModuleSection title="Twitch authorization" description="Connect your broadcaster account to authorize role lookups, then share the member link so members can authorize their existing Discord Connections.">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="text-sm text-gray-300">Broadcaster: <span class="font-medium text-white">{{ broadcasterStatus.connected ? "Connected as " + broadcasterStatus.login : "Not connected" }}</span></div>
-        <UButton :href="`/api/twitch-sync/broadcaster/connect?guild_id=${guildId}`" color="primary" variant="soft" icon="i-lucide-link">Connect broadcaster</UButton>
+        <UButton type="button" color="primary" variant="soft" icon="i-lucide-link" @click="connectBroadcaster">Connect broadcaster</UButton>
       </div>
       <p v-if="broadcasterStatus.error" class="mt-2 text-xs text-amber-300">{{ broadcasterStatus.error }}</p>
       <div class="mt-3 flex flex-wrap items-center gap-3">
-        <UButton :href="`/api/twitch-sync/member/connect?guild_id=${guildId}`" color="neutral" variant="outline" icon="i-lucide-user-check">Test member connection</UButton>
+        <UButton type="button" color="neutral" variant="outline" icon="i-lucide-user-check" @click="connectMember">Test member connection</UButton>
         <UButton color="neutral" variant="ghost" icon="i-lucide-copy" @click="copyMemberLink">Copy member connection link</UButton>
       </div>
       <p class="mt-2 text-xs text-gray-400">Members grant Discord Connections access once. MODUS never requests their Twitch password.</p>
@@ -109,12 +109,30 @@ import {
   type TwitchSyncInterval,
 } from "@modus/db/twitch-sync";
 import { roleProblem } from "~/utils/autoroles";
+import { twitchOAuthConnectPath } from "~/utils/twitch-oauth-navigation";
 
 const route = useRoute();
 const guildId = route.params.guild_id as string;
 const { state, isModuleEnabled, saveModuleSettings, getModuleConfig, loadRoles } =
   useServerSettings(guildId);
 const toast = useToast();
+function startOAuth(kind: "broadcaster" | "member") {
+  try {
+    // OAuth must be a full document navigation. A client-side NuxtLink to
+    // /api/** can resolve as a dashboard SPA route and show the 404 page.
+    const path = twitchOAuthConnectPath(kind, guildId);
+    window.location.assign(path);
+  } catch {
+    toast.add({
+      title: "Cannot connect Twitch",
+      description: "The dashboard could not identify this Discord server. Reopen Twitch Role Sync from your server dashboard.",
+      color: "error",
+    });
+  }
+}
+function connectBroadcaster() { startOAuth("broadcaster"); }
+function connectMember() { startOAuth("member"); }
+
 const broadcasterStatus = ref<{ connected: boolean; login?: string; error?: string }>({ connected: false });
 async function loadBroadcasterStatus() {
   try {
@@ -123,7 +141,7 @@ async function loadBroadcasterStatus() {
 }
 async function copyMemberLink() {
   if (import.meta.client) {
-    await navigator.clipboard.writeText(window.location.origin + "/api/twitch-sync/member/connect?guild_id=" + encodeURIComponent(guildId));
+    await navigator.clipboard.writeText(window.location.origin + twitchOAuthConnectPath("member", guildId));
     toast.add({ title: "Member connection link copied", color: "success" });
   }
 }
