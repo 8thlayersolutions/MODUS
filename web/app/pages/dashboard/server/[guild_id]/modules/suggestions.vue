@@ -23,7 +23,7 @@
             <span class="text-sm">Loading channels…</span>
           </div>
           <USelectMenu
-            v-else-if="channelOptions.length > 0"
+            v-else-if="suggestionChannelOptions.length > 0"
             v-model="settings.channelIds"
             :items="suggestionChannelOptions"
             value-key="value"
@@ -463,6 +463,7 @@ const baseline = ref(JSON.stringify(settings));
 const dirty = computed(() => JSON.stringify(settings) !== baseline.value);
 
 const save = async () => {
+  settings.channelId = settings.channelIds[0] ?? "";
   saving.value = true;
   const panel = toSavedPanel({
     title: settings.panelTitle,
