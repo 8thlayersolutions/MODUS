@@ -1,4 +1,4 @@
-import type { SuggestionRepository, SuggestionRow, SuggestionVoteRepository } from "@modus/db";
+import { allSuggestionPosts, type SuggestionRepository, type SuggestionRow, type SuggestionVoteRepository } from "@modus/db";
 import {
   buildSuggestionMessage,
   embedInputFromRow,
@@ -65,7 +65,7 @@ export async function applyReview(
     // The status is saved; the caller reports that the message could not be refreshed.
   }
 
-  if (updated.threadId && !withdrawn) {
+  if (allSuggestionPosts(updated).some((post) => !!post.threadId) && !withdrawn) {
     const note =
       `Marked **${STATUS_META[input.status].label}** by <@${input.reviewerId}>` +
       (input.reason ? `: ${input.reason}` : "");
