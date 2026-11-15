@@ -11,6 +11,7 @@
  */
 import { validateTwitchSyncSettings } from "@modus/db/twitch-sync";
 import { clampRecordingBitrate } from "@modus/db/recording-limits";
+import { parseStaffListSettings } from "@modus/db";
 import { validateWelcomeImageElements } from "@modus/db/welcome-images";
 import { getRepos } from "../../../utils/db";
 import { requireModuleAccess } from "../../../utils/session";
@@ -81,6 +82,10 @@ export default defineEventHandler(async (event) => {
       }
     }
     body.settings = validated.settings;
+  }
+
+  if (moduleName.toLowerCase() === "staff-list" && body?.settings !== undefined) {
+    body.settings = parseStaffListSettings(body.settings) as unknown as Record<string, any>;
   }
 
   const isWelcome = moduleName.toLowerCase() === "welcome";

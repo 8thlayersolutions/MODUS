@@ -115,6 +115,7 @@ export function useServerSettings(guildId: string) {
     "starboard",
     "suggestions",
     "applications",
+    "staff-list",
     "events",
     "polls",
     "giveaways",
