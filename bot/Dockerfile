@@ -37,6 +37,7 @@ COPY bot/patches ./bot/patches
 # and tsconfig present before `pnpm install` runs.
 COPY packages/db/tsconfig.json ./packages/db/
 COPY packages/db/src ./packages/db/src
+COPY packages/db/migrations ./packages/db/migrations
 
 # Install ALL workspace dependencies with the frozen root lockfile. Scripts stay
 # enabled so native voice packages (@discordjs/opus, sodium-native) build their
@@ -69,10 +70,14 @@ WORKDIR /app
 
 # Self-contained bot deployment: package.json + node_modules + dist.
 COPY --from=builder /deploy/bot ./
+# The runner runs compiled code from @modus/db; SQL files must also be present.
+COPY --from=builder /repo/packages/db/migrations ./db-migrations
+ENV MODUS_MIGRATIONS_DIR=/app/db-migrations
+RUN test -f /app/db-migrations/0005_suggestion_multiple_channels.sql
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD node -e "const http = require('http'); http.get('http://localhost:' + (process.env.BOT_PORT || 3000), (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
 EXPOSE 3000
 
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "node dist/run-migrations.js && exec node dist/index.js"]
