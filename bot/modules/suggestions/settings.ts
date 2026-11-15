@@ -10,6 +10,7 @@ export interface ParsedSuggestionsSettings {
 
 const DEFAULTS: SuggestionsSettingsType = {
   channelId: null,
+  channelIds: [],
   staffRoleIds: [],
   createThread: true,
   closeVotingOnDecision: true,
@@ -23,9 +24,14 @@ const DEFAULTS: SuggestionsSettingsType = {
 export function parseSuggestionsSettings(raw: unknown): ParsedSuggestionsSettings {
   const parsed = SuggestionsSettingsSchema.safeParse(raw ?? {});
   if (!parsed.success) return { settings: { ...DEFAULTS }, configured: false, invalid: true };
+  // Old configurations only have channelId; upgrade them in memory without
+  // requiring every guild to open the dashboard and re-save its settings.
+  const channelIds = parsed.data.channelIds.length
+    ? parsed.data.channelIds
+    : parsed.data.channelId ? [parsed.data.channelId] : [];
   return {
-    settings: parsed.data,
-    configured: parsed.data.channelId !== null,
+    settings: { ...parsed.data, channelId: channelIds[0] ?? null, channelIds },
+    configured: channelIds.length > 0,
     invalid: false,
   };
 }
