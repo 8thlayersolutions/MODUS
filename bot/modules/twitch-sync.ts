@@ -2,9 +2,9 @@ import type { BotModule, ModuleManager } from "../ModuleManager";
 import { parseTwitchSyncSettings } from "@modus/db/twitch-sync";
 
 /**
- * Registers the Twitch Sync settings surface. Actual Discord Connections OAuth,
- * broadcaster authentication, and synchronization worker are a separate
- * integration step; do not grant or revoke roles based on unverified settings.
+ * OAuth-based Twitch Role Sync. Each shard reconciles only its own guilds.
+ * Verification, OAuth token handling and Discord role mutations are isolated
+ * in the authenticated dashboard API; no access tokens enter the bot logs.
  */
 const lastSyncByGuild = new Map<string, number>();
 let sweeping = false;
