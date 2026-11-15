@@ -110,7 +110,7 @@ export async function discordTwitchConnection(token: string): Promise<DiscordTwi
   const connections = await $fetch<DiscordTwitchConnection[]>("https://discord.com/api/v10/users/@me/connections", {
     headers: { Authorization: "Bearer " + token },
   });
-  return connections.find(c => c.type === "twitch" && !!c.id) || null;
+  return connections.find(c => c.type === "twitch" && c.verified === true && !!c.id) || null;
 }
 export async function requireGuildMembership(guildId: string, userId: string): Promise<void> {
   const token = config().discordBotToken as string;
@@ -131,7 +131,22 @@ export async function activeTwitchToken(guildId: string): Promise<{ accessToken:
   const row = await repo.getBroadcaster(guildId);
   if (!row) return null;
   let tokens = decryptTokens(row.encryptedToken);
-  if (tokens.expiresAt < Date.now() + 60_000) {
+  let refresh = tokens.expiresAt < Date.now() + 60_000;
+  if (!refresh) {
+    try {
+      const checked = await $fetch<{ user_id: string; client_id: string; scopes: string[] }>("https://id.twitch.tv/oauth2/validate", {
+        headers: { Authorization: "OAuth " + tokens.accessToken },
+      });
+      if (checked.user_id !== row.twitchId || checked.client_id !== requireTwitchConfig().clientId) {
+        throw new Error("Twitch authorization is not for the configured broadcaster/application");
+      }
+    } catch (error: any) {
+      // Invalid tokens can be refreshed. Network/5xx errors are not a lost grant.
+      if (error?.status === 401 || error?.statusCode === 401) refresh = true;
+      else throw error;
+    }
+  }
+  if (refresh) {
     tokens = await refreshTwitch(tokens);
     await repo.setBroadcaster({
       guildId, twitchId: row.twitchId, twitchLogin: row.twitchLogin,
