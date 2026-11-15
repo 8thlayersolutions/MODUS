@@ -103,24 +103,32 @@ Bind the remote node to its tailnet interface (or firewall `2333` to the tailnet
 
 Music is optional. Leave `LAVALINK_NODES_JSON` empty and the bot logs a warning at startup, skips the relay entirely, and answers every music command with a `MUSIC_RELAY_OFFLINE` error; tickets, moderation, recordings, and the rest of the bot are unaffected. The same applies while the node is merely down — the bot's own health check never fails because music is unavailable, and `bot` is deliberately **not** gated on Lavalink's health in `docker-compose.yml`, so a slow or unhealthy node can't keep the bot from starting. Queues live in Postgres, so playback resumes once a healthy node is back.
 
-## Database Migrations
+## Database Migrations (Automatic on Deploy)
 
-The **MODUS bot Docker image automatically applies pending SQL migrations before starting**
-the Discord bot. The SQL files are bundled in the image. On every Coolify or Docker
-redeploy, the startup step checks `_db_migrations`, skips previously applied files,
-and runs new files in filename order. The database connection is protected by a
-PostgreSQL advisory lock so concurrent bot starts cannot run a migration twice.
+The **MODUS bot Docker image runs database migrations before logging in to Discord**.
+Every Coolify redeploy of the bot checks both the canonical Drizzle migrations
+(`packages/db/drizzle/`) and the legacy SQL migration history
+(`packages/db/migrations/`). Pending changes are applied once and recorded in
+Postgres; subsequent redeploys skip completed migrations.
 
-If any migration fails, the container exits without logging in to Discord. Check
-the bot container logs for `[migrations]` and resolve the database error before
-redeploying. **Deploy the bot image before the dashboard image when an update
-introduces new database columns.** Back up production Postgres before migrations.
+A PostgreSQL advisory lock serializes concurrent bot startups. If a migration
+fails, the bot does **not** start; inspect the bot logs for `[migrations]`.
+Back up production databases before schema changes, and deploy the bot image
+before a new dashboard version that depends on the changed schema.
 
-The automatic runner assumes the existing database schema is already initialized.
-For a brand-new database, bootstrap it using the existing database setup process
-before deploying modules that use later-added tables.
+**One-time prerequisite for existing deployments:** Existing databases that were
+created before Drizzle must already have valid Drizzle migration history.
+The startup preflight refuses to apply the baseline to a populated database
+without that history. If the log reports missing Drizzle history, check the
+existing schema, then run the repository's `pnpm db:baseline` procedure manually
+once; do not blindly baseline a database that may be missing earlier columns.
 
-For local development without Docker, migrations can still be applied manually:
+New database schema changes belong in Drizzle migrations, generated with
+`pnpm db:generate` and committed with the journal and snapshot. The
+`0005_suggestion_multiple_channels.sql` legacy migration is also tracked in
+Drizzle as `0022_suggestions_multi_channel_posts.sql` to preserve compatibility.
+
+For local development without Docker:
 
 ```sh
 pnpm install
