@@ -13,11 +13,12 @@ export interface PostedLocation {
 }
 
 export interface SubmitDeps {
-  suggestions: Pick<SuggestionRepository, "create" | "setPost" | "deleteById">;
+  suggestions: Pick<SuggestionRepository, "create" | "setPost" | "deleteById"> & Partial<Pick<SuggestionRepository, "addPost" | "updatePostThread">>;
   /** Posts the embed (a channel message, or a new forum post). Throws when it cannot. */
   post(
     suggestion: SuggestionRow,
     payload: SuggestionMessagePayload,
+    channelId?: string,
   ): Promise<PostedLocation>;
   /** Deletes a posted message from Discord. Best-effort; errors are swallowed. */
   deletePost(post: PostedLocation): Promise<void>;
@@ -42,6 +43,8 @@ export async function submitSuggestion(
     title: string;
     body: string;
     createThread: boolean;
+    /** Ordered destinations. No value keeps the legacy single-channel behavior. */
+    channelIds?: string[];
   },
 ): Promise<SubmitResult> {
   const suggestion = await deps.suggestions.create({
@@ -106,6 +109,41 @@ export async function submitSuggestion(
       }
     } catch (error) {
       deps.reportError?.("thread", error);
+    }
+  }
+
+  // Mirror the same suggestion id/buttons in every additional destination.
+  // A failed secondary channel does not delete a successfully submitted idea.
+  // Save each copy before moving on so votes/reviews can find every post.
+  for (const channelId of (input.channelIds ?? []).slice(1)) {
+    let mirror: PostedLocation;
+    try {
+      mirror = await deps.post(suggestion, payload, channelId);
+    } catch (error) {
+      deps.reportError?.("mirror-post", error);
+      continue;
+    }
+    try {
+      await deps.suggestions.addPost?.(suggestion.id, mirror);
+    } catch (error) {
+      deps.reportError?.("mirror-persist", error);
+      try { await deps.deletePost(mirror); } catch (cleanupError) {
+        deps.reportError?.("mirror-cleanup", cleanupError);
+      }
+      continue;
+    }
+    if (input.createThread && !mirror.threadId) {
+      try {
+        const threadId = await deps.createThread(suggestion, mirror);
+        if (threadId) {
+          // Persist thread metadata through a dedicated post update below.
+          // The mirror's embed is still functional if a thread cannot be saved.
+          mirror.threadId = threadId;
+          await deps.suggestions.updatePostThread?.(suggestion.id, mirror.messageId, threadId);
+        }
+      } catch (error) {
+        deps.reportError?.("mirror-thread", error);
+      }
     }
   }
 
