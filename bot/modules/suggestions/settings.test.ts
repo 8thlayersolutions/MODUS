@@ -17,6 +17,7 @@ describe("parseSuggestionsSettings", () => {
       expect(parsed.invalid).toBe(false);
       expect(parsed.settings).toEqual({
         channelId: null,
+        channelIds: [],
         staffRoleIds: [],
         createThread: true,
         closeVotingOnDecision: true,
@@ -28,6 +29,7 @@ describe("parseSuggestionsSettings", () => {
   it("is configured when a channel is set, keeping the other values", () => {
     const parsed = parseSuggestionsSettings({
       channelId: "c1",
+      channelIds: ["c1"],
       staffRoleIds: ["r1", "r2"],
       createThread: false,
       closeVotingOnDecision: false,
@@ -35,11 +37,24 @@ describe("parseSuggestionsSettings", () => {
     expect(parsed.configured).toBe(true);
     expect(parsed.settings).toEqual({
       channelId: "c1",
+      channelIds: ["c1"],
       staffRoleIds: ["r1", "r2"],
       createThread: false,
       closeVotingOnDecision: false,
       ...PANEL_DEFAULTS,
     });
+  });
+
+  it("supports multiple channels while retaining the first as the legacy primary", () => {
+    const result = parseSuggestionsSettings({ channelIds: ["c1", "c2"] });
+    expect(result.configured).toBe(true);
+    expect(result.settings.channelIds).toEqual(["c1", "c2"]);
+    expect(result.settings.channelId).toBe("c1");
+  });
+
+  it("rejects duplicate and excessive channels", () => {
+    expect(parseSuggestionsSettings({ channelIds: ["c1", "c1"] }).invalid).toBe(true);
+    expect(parseSuggestionsSettings({ channelIds: Array.from({ length: 26 }, (_, i) => String(i)) }).invalid).toBe(true);
   });
 
   it("treats a null or missing channel as unconfigured", () => {
