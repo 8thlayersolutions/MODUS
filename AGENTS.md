@@ -120,6 +120,32 @@ Scopes: `bot`, `web`, `api`, `db`.
 - **[.github/workflows/docker-publish.yml](.github/workflows/docker-publish.yml)** — On release: builds both services with semver tags.
 - **[.github/workflows/release-please.yml](.github/workflows/release-please.yml)** — Opens version-bump PRs from conventional commits.
 
+## Mandatory database migrations for all future changes
+
+Any change to `packages/db/src/schema.ts`, a repository's required columns,
+indexes, constraints, or a persisted module data model MUST ship with a versioned
+migration. The production bot deployment must apply pending migrations before
+connecting to Discord; manual SQL in Coolify is an emergency recovery path, not
+the normal release process.
+
+- **Generate and commit new schema migrations via Drizzle** (`pnpm db:generate`)
+  under `packages/db/drizzle/`, including its journal and snapshots. Legacy
+  `packages/db/migrations/*.sql` files are not the default for new changes.
+- Automatic production startup runs migrations once in a serialized manner
+  with a Postgres advisory lock. Already applied migrations are skipped; a
+  failure must abort the bot startup with a clear error in container logs.
+- Keep compatibility with existing data: additive changes first, backfill
+  existing records, then only in later releases enforce restrictive constraints.
+  Do not drop/rename populated columns as part of a rollout without a
+  documented multi-stage migration and rollback/backup plan.
+- Build both the bot and dashboard before merging. Verify a fresh apply,
+  a repeated redeploy (no-op), and a failure path. For multi-service deployments,
+  deploy the schema-capable bot before web code that depends on new columns.
+- Treat production DB backups as required preparation for destructive migrations.
+
+This is an ongoing requirement for **every** future MODUS module and update,
+not a one-off implementation for Suggestions.
+
 ## Adding features
 
 **New bot module.** Create `bot/modules/<name>.ts` exporting a `Module`. If it needs persistence: define the table(s) in `packages/db/src/schema.ts`, add a repository in `packages/db/src/repositories/`, run `pnpm db:generate` to emit a migration into `packages/db/drizzle/`, re-export from `packages/db/src/index.ts`, then surface the methods you need on `bot/DatabaseService.ts`. For hot-read data, wire it through `CacheService` so Redis-backed invalidation works across shards. If it needs settings, add a Zod schema in `bot/lib/schemas.ts`.

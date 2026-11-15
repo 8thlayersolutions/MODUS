@@ -103,21 +103,35 @@ Bind the remote node to its tailnet interface (or firewall `2333` to the tailnet
 
 Music is optional. Leave `LAVALINK_NODES_JSON` empty and the bot logs a warning at startup, skips the relay entirely, and answers every music command with a `MUSIC_RELAY_OFFLINE` error; tickets, moderation, recordings, and the rest of the bot are unaffected. The same applies while the node is merely down — the bot's own health check never fails because music is unavailable, and `bot` is deliberately **not** gated on Lavalink's health in `docker-compose.yml`, so a slow or unhealthy node can't keep the bot from starting. Queues live in Postgres, so playback resumes once a healthy node is back.
 
-## Database Initialization (First Time Only)
+## Database Migrations (Automatic on Deploy)
 
-Before starting the bot, you need to apply the database schema. If you are using the Postgres container provided in `docker-compose.yml`, start it first:
+The **MODUS bot Docker image runs database migrations before logging in to Discord**.
+Every Coolify redeploy of the bot checks both the canonical Drizzle migrations
+(`packages/db/drizzle/`) and the legacy SQL migration history
+(`packages/db/migrations/`). Pending changes are applied once and recorded in
+Postgres; subsequent redeploys skip completed migrations.
 
-```sh
-# Start Postgres and Redis locally
-docker compose up -d postgres redis
-```
+A PostgreSQL advisory lock serializes concurrent bot startups. If a migration
+fails, the bot does **not** start; inspect the bot logs for `[migrations]`.
+Back up production databases before schema changes, and deploy the bot image
+before a new dashboard version that depends on the changed schema.
 
-Wait a moment for Postgres to initialize. Then run the schema migrations using pnpm:
+**One-time prerequisite for existing deployments:** Existing databases that were
+created before Drizzle must already have valid Drizzle migration history.
+The startup preflight refuses to apply the baseline to a populated database
+without that history. If the log reports missing Drizzle history, check the
+existing schema, then run the repository's `pnpm db:baseline` procedure manually
+once; do not blindly baseline a database that may be missing earlier columns.
+
+New database schema changes belong in Drizzle migrations, generated with
+`pnpm db:generate` and committed with the journal and snapshot. The
+`0005_suggestion_multiple_channels.sql` legacy migration is also tracked in
+Drizzle as `0022_suggestions_multi_channel_posts.sql` to preserve compatibility.
+
+For local development without Docker:
 
 ```sh
 pnpm install
-
-# Run the schema migration script
 DATABASE_URL=postgres://modus:modus@localhost:5432/modus pnpm --filter @modus/db run migrate
 ```
 
