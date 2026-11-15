@@ -113,8 +113,13 @@ export class SuggestionRepository {
 
   /** Remove a deleted copy and withdraw only when no copies remain. */
   async removeDeletedPost(guildId: string, channelId: string, messageId?: string): Promise<number> {
+    const match = JSON.stringify([{ channelId, ...(messageId ? { messageId } : {}) }]);
     const rows = await this.db.select().from(suggestions)
-      .where(and(eq(suggestions.guildId, guildId), ne(suggestions.status, "withdrawn")));
+      .where(and(
+        eq(suggestions.guildId, guildId),
+        ne(suggestions.status, "withdrawn"),
+        sql`${suggestions.posts} @> ${match}::jsonb`,
+      ));
     let removed = 0;
     for (const row of rows) {
       const existing = allSuggestionPosts(row);
