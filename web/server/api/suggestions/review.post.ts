@@ -7,6 +7,7 @@
  * Body: { guild_id, id, status, reason? }
  */
 import { getRepos } from "../../utils/db";
+import { allSuggestionPosts } from "@modus/db";
 import { requireModuleAccess } from "../../utils/session";
 import { isArchivedThreadError, parseReviewBody } from "../../utils/suggestions";
 import { buildSuggestionMessage, isVotingLocked, STATUS_META } from "./_embed";
@@ -65,7 +66,9 @@ export default defineEventHandler(async (event) => {
 
   let embedUpdated = false;
   let withdrawn = false;
-  if (updated.channelId && updated.messageId) {
+  let missingPosts = 0;
+  const posts = allSuggestionPosts(updated);
+  if (posts.length) {
     const payload = buildSuggestionMessage({
       id: updated.id,
       number: updated.number,
@@ -82,54 +85,47 @@ export default defineEventHandler(async (event) => {
     });
     const headers = { Authorization: `Bot ${botToken}`, "Content-Type": "application/json" };
     // PATCH carries embeds + components only (no `content`).
-    const editMessage = () =>
-      $fetch(`${DISCORD_API}/channels/${updated.channelId}/messages/${updated.messageId}`, {
-        method: "PATCH",
-        headers,
-        body: payload,
-      });
-    try {
-      try {
-        await editMessage();
-      } catch (error: any) {
-        if (!isArchivedThreadError(error)) throw error;
-        // A forum suggestion is its thread's starter message and can't be edited while the
-        // thread is archived: un-archive once, then retry the edit once.
-        await $fetch(`${DISCORD_API}/channels/${updated.channelId}`, {
-          method: "PATCH",
-          headers,
-          body: { archived: false },
+    for (const post of posts) {
+      const editMessage = () =>
+        $fetch(`${DISCORD_API}/channels/${post.channelId}/messages/${post.messageId}`, {
+          method: "PATCH", headers, body: payload,
         });
-        await editMessage();
-      }
-      embedUpdated = true;
-    } catch (error: any) {
-      const code = error?.data?.code ?? error?.response?._data?.code;
-      if (code === 10008 || error?.status === 404 || error?.statusCode === 404) {
-        await repos.suggestions.markWithdrawn(id);
-        withdrawn = true;
-      } else {
-        console.error(
-          "[Suggestions Review API] Discord rejected the edit:",
-          JSON.stringify(error?.data || error?.response?._data, null, 2),
-        );
+      try {
+        try {
+          await editMessage();
+        } catch (error: any) {
+          if (!isArchivedThreadError(error)) throw error;
+          await $fetch(`${DISCORD_API}/channels/${post.channelId}`, {
+            method: "PATCH", headers, body: { archived: false },
+          });
+          await editMessage();
+        }
+        embedUpdated = true;
+      } catch (error: any) {
+        const code = error?.data?.code ?? error?.response?._data?.code;
+        if (code === 10008 || error?.status === 404 || error?.statusCode === 404) {
+          missingPosts++;
+          continue;
+        }
+        console.error("[Suggestions Review API] Discord rejected the edit:", error?.data || error);
       }
     }
   }
-
-  if (updated.threadId) {
+  if (posts.length && missingPosts === posts.length) {
+    await repos.suggestions.markWithdrawn(id);
+    withdrawn = true;
+  }
+  for (const post of posts) {
+    if (!post.threadId || withdrawn) continue;
     const label = STATUS_META[status].label;
-    const note =
-      `Marked **${label}** by <@${identity.userId}>` + (reason ? `: ${reason}` : "");
+    const note = `Marked **${label}** by <@${identity.userId}>` + (reason ? `: ${reason}` : "");
     try {
-      // `reason` is user-controlled text: never let it ping anyone.
-      await $fetch(`${DISCORD_API}/channels/${updated.threadId}/messages`, {
-        method: "POST",
-        headers: { Authorization: `Bot ${botToken}`, "Content-Type": "application/json" },
+      await $fetch(`${DISCORD_API}/channels/${post.threadId}/messages`, {
+        method: "POST", headers,
         body: { content: note, allowed_mentions: { parse: [] } },
       });
     } catch {
-      // Archived/locked/deleted thread — never fail the review over a courtesy note.
+      // A missing/archived thread must not invalidate a review.
     }
   }
 

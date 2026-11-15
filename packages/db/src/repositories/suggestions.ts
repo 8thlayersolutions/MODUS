@@ -5,6 +5,15 @@ import { and, desc, eq, inArray, lt, ne, sql } from "drizzle-orm";
 import { requireReturningRow, type Database } from "../client";
 import { suggestions, type SuggestionRow } from "../schema";
 
+export type SuggestionPost = { channelId: string; messageId: string; threadId?: string | null };
+export function allSuggestionPosts(row: SuggestionRow): SuggestionPost[] {
+  if (row.posts?.length) return row.posts;
+  return row.channelId && row.messageId
+    ? [{ channelId: row.channelId, messageId: row.messageId, threadId: row.threadId }]
+    : [];
+}
+
+
 export const SUGGESTION_STATUSES = [
   "pending",
   "considering",
@@ -74,8 +83,63 @@ export class SuggestionRepository {
         channelId: post.channelId,
         messageId: post.messageId,
         ...(post.threadId !== undefined ? { threadId: post.threadId } : {}),
+        posts: sql`CASE WHEN jsonb_array_length(${suggestions.posts}) = 0
+          THEN jsonb_build_array(jsonb_build_object('channelId', ${post.channelId}, 'messageId', ${post.messageId}, 'threadId', ${post.threadId ?? null}))
+          ELSE (SELECT coalesce(jsonb_agg(CASE WHEN p->>'messageId' = ${post.messageId}
+            THEN jsonb_build_object('channelId', ${post.channelId}, 'messageId', ${post.messageId}, 'threadId', ${post.threadId ?? null}) ELSE p END), '[]'::jsonb)
+            FROM jsonb_array_elements(${suggestions.posts}) p)
+        END`,
       })
       .where(eq(suggestions.id, id));
+  }
+
+  /** Add another posted copy, retaining the first location as the primary link. */
+  async addPost(id: string, post: SuggestionPost): Promise<void> {
+    await this.db.update(suggestions)
+      .set({ posts: sql`${suggestions.posts} || ${JSON.stringify(post)}::jsonb` })
+      .where(eq(suggestions.id, id));
+  }
+
+  async updatePostThread(id: string, messageId: string, threadId: string): Promise<void> {
+    await this.db.update(suggestions)
+      .set({ posts: sql`(
+        SELECT coalesce(jsonb_agg(CASE WHEN p->>'messageId' = ${messageId}
+          THEN jsonb_set(p, '{threadId}', to_jsonb(${threadId}::text))
+          ELSE p END), '[]'::jsonb)
+        FROM jsonb_array_elements(${suggestions.posts}) p
+      )` })
+      .where(eq(suggestions.id, id));
+  }
+
+  /** Remove a deleted copy and withdraw only when no copies remain. */
+  async removeDeletedPost(guildId: string, channelId: string, messageId?: string): Promise<number> {
+    const match = JSON.stringify([{ channelId, ...(messageId ? { messageId } : {}) }]);
+    const rows = await this.db.select().from(suggestions)
+      .where(and(
+        eq(suggestions.guildId, guildId),
+        ne(suggestions.status, "withdrawn"),
+        sql`${suggestions.posts} @> ${match}::jsonb`,
+      ));
+    let removed = 0;
+    for (const row of rows) {
+      const existing = allSuggestionPosts(row);
+      const remaining = existing.filter((post) => messageId
+        ? !(post.channelId === channelId && post.messageId === messageId)
+        : post.channelId !== channelId);
+      if (remaining.length === existing.length) continue;
+      const primary = remaining[0] ?? null;
+      await this.db.update(suggestions)
+        .set({
+          posts: remaining,
+          channelId: primary?.channelId ?? null,
+          messageId: primary?.messageId ?? null,
+          threadId: primary?.threadId ?? null,
+          ...(remaining.length ? {} : { status: "withdrawn" }),
+        })
+        .where(eq(suggestions.id, row.id));
+      removed++;
+    }
+    return removed;
   }
 
   async deleteById(id: string): Promise<void> {

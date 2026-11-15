@@ -20,6 +20,7 @@ export interface SuggestionItem {
   channelId: string | null;
   messageId: string | null;
   threadId: string | null;
+  posts: Array<{ channelId: string; messageId: string; threadId?: string | null }>;
   createdAt: string;
   up: number;
   down: number;

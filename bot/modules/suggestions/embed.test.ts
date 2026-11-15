@@ -111,6 +111,8 @@ describe("embedInputFromRow", () => {
     channelId: "c1",
     messageId: "m1",
     threadId: null,
+
+    posts: [],
     createdAt: new Date("2026-10-02T12:00:00Z"),
     ...over,
   });

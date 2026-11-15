@@ -16,6 +16,7 @@ const row = (over: Partial<SuggestionRow> = {}): SuggestionRow => ({
   channelId: "c1",
   messageId: "m1",
   threadId: "t1",
+  posts: [{ channelId: "c1", messageId: "m1", threadId: "t1" }],
   createdAt: new Date("2026-10-02T12:00:00Z"),
   ...over,
 });

@@ -14,8 +14,8 @@
     >
       <div class="space-y-5">
         <UFormField
-          label="Suggestions channel"
-          description="Where new suggestions are posted. A text channel gets an embed plus a thread; a forum or media channel gets one post per suggestion."
+          label="Suggestions channels"
+          description="Choose up to 25 channels. Every new suggestion is posted to each selected channel with shared votes and staff review. Text channels can include a thread; forum/media channels create one post each."
           class="w-full"
         >
           <div v-if="state.channelsLoading" class="flex items-center gap-2 py-1.5 text-gray-400">
@@ -23,11 +23,12 @@
             <span class="text-sm">Loading channels…</span>
           </div>
           <USelectMenu
-            v-else-if="channelOptions.length > 0"
-            v-model="settings.channelId"
+            v-else-if="suggestionChannelOptions.length > 0"
+            v-model="settings.channelIds"
             :items="suggestionChannelOptions"
             value-key="value"
-            placeholder="Select a channel…"
+            placeholder="Select channels…"
+            multiple
             searchable
             icon="i-lucide-hash"
             class="w-full"
@@ -142,7 +143,7 @@
             color="primary"
             icon="i-lucide-send"
             :loading="deploying"
-            :disabled="!settings.channelId || !panelTarget || !!panelValidation"
+            :disabled="!settings.channelIds.length || !panelTarget || !!panelValidation"
             @click="postPanel"
           >
             {{ panelButtonText }}
@@ -150,8 +151,8 @@
           <p class="text-[13px] text-gray-400">Posting also saves your settings.</p>
         </div>
 
-        <p v-if="!settings.channelId" class="text-[13px] text-amber-200">
-          Choose a suggestions channel first — the panel button needs somewhere to send suggestions.
+        <p v-if="!settings.channelIds.length" class="text-[13px] text-amber-200">
+          Choose at least one suggestions channel first — the panel button needs somewhere to send suggestions.
         </p>
 
         <p
@@ -260,6 +261,21 @@
           <p class="text-[13px] text-gray-400">
             Submitted by {{ target.authorName }} · ▲ {{ target.up }} · ▼ {{ target.down }}
           </p>
+          <div v-if="target.posts?.length" class="flex flex-wrap gap-2">
+            <UButton
+              v-for="post in target.posts"
+              :key="post.messageId"
+              :to="messageLink(guildId, post.channelId, post.messageId)!"
+              target="_blank"
+              rel="noopener noreferrer"
+              color="neutral"
+              variant="soft"
+              size="xs"
+              icon="i-lucide-external-link"
+            >
+              View in channel
+            </UButton>
+          </div>
 
           <div>
             <span class="mb-1.5 block text-sm font-medium text-white">Voters</span>
@@ -373,6 +389,7 @@ const {
 const saving = ref(false);
 const settings = reactive<{
   channelId: string;
+  channelIds: string[];
   staffRoleIds: string[];
   createThread: boolean;
   closeVotingOnDecision: boolean;
@@ -383,6 +400,7 @@ const settings = reactive<{
   panelMessageId: string;
 }>({
   channelId: "",
+  channelIds: [],
   staffRoleIds: [],
   createThread: true,
   closeVotingOnDecision: true,
@@ -426,6 +444,13 @@ const panelButtonText = computed(() =>
 // The bot's settings schema accepts at most this many staff roles; cap the
 // selection so a saved config always parses there.
 const MAX_STAFF_ROLES = 25;
+const MAX_SUGGESTION_CHANNELS = 25;
+watch(
+  () => settings.channelIds.length,
+  (count) => {
+    if (count > MAX_SUGGESTION_CHANNELS) settings.channelIds = settings.channelIds.slice(0, MAX_SUGGESTION_CHANNELS);
+  },
+);
 watch(
   () => settings.staffRoleIds.length,
   (count) => {
@@ -438,6 +463,7 @@ const baseline = ref(JSON.stringify(settings));
 const dirty = computed(() => JSON.stringify(settings) !== baseline.value);
 
 const save = async () => {
+  settings.channelId = settings.channelIds[0] ?? "";
   saving.value = true;
   const panel = toSavedPanel({
     title: settings.panelTitle,
@@ -445,7 +471,8 @@ const save = async () => {
     buttonLabel: settings.panelButtonLabel,
   });
   const ok = await saveModuleSettings("suggestions", {
-    channelId: settings.channelId || null,
+    channelId: settings.channelIds[0] || null,
+    channelIds: settings.channelIds,
     staffRoleIds: settings.staffRoleIds,
     createThread: settings.createThread,
     closeVotingOnDecision: settings.closeVotingOnDecision,
@@ -516,7 +543,7 @@ async function submitReview() {
 // ── Panel ────────────────────────────────────────────────────────────
 
 async function postPanel() {
-  if (!settings.channelId || !panelTarget.value || panelValidation.value) return;
+  if (!settings.channelIds.length || !panelTarget.value || panelValidation.value) return;
   deploying.value = true;
   panelError.value = null;
   try {
@@ -546,7 +573,10 @@ async function postPanel() {
 onMounted(async () => {
   const saved = getModuleConfig("suggestions");
   if (saved) {
-    settings.channelId = typeof saved.channelId === "string" ? saved.channelId : "";
+    settings.channelIds = Array.isArray(saved.channelIds) && saved.channelIds.length
+      ? saved.channelIds.filter((id: unknown): id is string => typeof id === "string")
+      : typeof saved.channelId === "string" ? [saved.channelId] : [];
+    settings.channelId = settings.channelIds[0] ?? "";
     settings.staffRoleIds = Array.isArray(saved.staffRoleIds) ? saved.staffRoleIds : [];
     settings.createThread = saved.createThread ?? true;
     settings.closeVotingOnDecision = saved.closeVotingOnDecision ?? true;
