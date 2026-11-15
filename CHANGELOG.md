@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.39.0](https://github.com/8thlayersolutions/MODUS/compare/modus-v1.38.0...modus-v1.39.0) (2026-11-15)
+
+
+### ✨ Features
+
+* **bot:** add configurable statistic channels ([f632a7a](https://github.com/8thlayersolutions/MODUS/commit/f632a7a0d0c97a677b5489a9ca51b824680e938d))
+* **bot:** add configurable statistic channels ([e788f19](https://github.com/8thlayersolutions/MODUS/commit/e788f195948ce23ae027d738e2e6b49af4153829))
+
+
+### 🐛 Bug Fixes
+
+* **api:** report missing suggestions migration instead of unexplained 500 ([91ffe9d](https://github.com/8thlayersolutions/MODUS/commit/91ffe9d58bd86ba7f05c4752223b3697d1a5a3ce))
+* **web:** hydrate suggestion channel selections after configs finish loading ([fa4be21](https://github.com/8thlayersolutions/MODUS/commit/fa4be215f48eadfbb5f27c0c32a3b06429d337dd))
+* **web:** prevent Twitch OAuth connect links from opening SPA 404 ([38723f9](https://github.com/8thlayersolutions/MODUS/commit/38723f91c1c573f48dc6f0c3fc7a393741099375))
+* **web:** restore saved Suggestions channels and clarify pending migrations ([083a48c](https://github.com/8thlayersolutions/MODUS/commit/083a48c2dc472434702a3ae22fc679fa541a23ed))
+* **web:** retain legacy and multiple suggestion destinations ([d92c83a](https://github.com/8thlayersolutions/MODUS/commit/d92c83a627045d3d79828973f51ad762218d7779))
+* **web:** use full-page navigation for Twitch OAuth connect buttons ([9fb371c](https://github.com/8thlayersolutions/MODUS/commit/9fb371cbb0f066df4a157ee8986c097f00f5df6a))
+
 ## [1.38.0](https://github.com/8thlayersolutions/MODUS/compare/modus-v1.37.0...modus-v1.38.0) (2026-11-15)
 
 
