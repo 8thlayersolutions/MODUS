@@ -1276,6 +1276,9 @@ export const suggestions = pgTable(
     channelId: text("channel_id"),
     messageId: text("message_id"),
     threadId: text("thread_id"),
+    /** All posted copies. Legacy channel/message/thread fields remain the primary copy. */
+    posts: jsonb("posts").$type<Array<{ channelId: string; messageId: string; threadId?: string | null }>>()
+      .notNull().default(sql`'[]'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
