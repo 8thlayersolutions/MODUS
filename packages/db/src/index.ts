@@ -37,5 +37,7 @@ export * from "./application-reviewers";
 export * from "./twitch-sync";
 
 export * from "./staff-list";
+export * from "./statistic-channels";
+export * from "./repositories/statistic-connections";
 
 export * from "./repositories/twitch-sync";

@@ -1407,3 +1407,14 @@ export const twitchSyncGrants = pgTable("twitch_sync_grants", {
 }, t => ({
   byGuildMemberRole: primaryKey({ columns: [t.guildId, t.discordId, t.roleId] }),
 }));
+
+// Encrypted OAuth credentials, kept outside dashboard-readable guild settings.
+export const statisticConnections = pgTable("statistic_connections", {
+  guildId: text("guild_id").notNull(),
+  provider: text("provider").notNull(),
+  accountId: text("account_id").notNull(),
+  accountName: text("account_name").notNull(),
+  encryptedToken: text("encrypted_token").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => ({ byGuildProvider: primaryKey({ columns: [t.guildId, t.provider] }) }));
