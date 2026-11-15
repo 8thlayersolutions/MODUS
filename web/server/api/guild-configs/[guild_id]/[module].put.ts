@@ -9,6 +9,7 @@
  *   - Unknown fields are ignored.
  *   - Module "recording": premium-only bitrates are clamped for non-premium guilds.
  */
+import { validateTwitchSyncSettings } from "@modus/db/twitch-sync";
 import { clampRecordingBitrate } from "@modus/db/recording-limits";
 import { validateWelcomeImageElements } from "@modus/db/welcome-images";
 import { getRepos } from "../../../utils/db";
@@ -44,6 +45,43 @@ export default defineEventHandler(async (event) => {
     enabled?: boolean;
     settings?: Record<string, any>;
   }>(event);
+
+  // Twitch mappings are user-configurable, but must not allow arbitrary
+  // unmanaged/missing/high-permission role IDs to be persisted.
+  if (moduleName.toLowerCase() === "twitch-sync" && body?.settings !== undefined) {
+    const validated = validateTwitchSyncSettings(body.settings);
+    if (!validated.ok) {
+      throw createError({ statusCode: 400, statusMessage: validated.error });
+    }
+    const roleIds = [...new Set(Object.values(validated.settings.mappings).filter(Boolean))];
+    if (roleIds.length) {
+      const config = useRuntimeConfig();
+      const token = config.discordBotToken as string;
+      const botId = config.public.discordClientId as string;
+      if (!token || !botId) {
+        throw createError({ statusCode: 503, statusMessage: "Discord bot credentials are unavailable." });
+      }
+      const headers = { Authorization: "Bot " + token };
+      let roles: Array<{ id: string; managed: boolean; position: number }>;
+      let member: { roles: string[] };
+      try {
+        [roles, member] = await Promise.all([
+          $fetch(`https://discord.com/api/v10/guilds/${guildId}/roles`, { headers }),
+          $fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${botId}`, { headers }),
+        ]);
+      } catch {
+        throw createError({ statusCode: 503, statusMessage: "Unable to check the bot's role hierarchy." });
+      }
+      const top = roles.filter((r) => member.roles.includes(r.id)).reduce((max, r) => Math.max(max, r.position), 0);
+      for (const id of roleIds) {
+        const role = roles.find((r) => r.id === id);
+        if (!role || role.id === guildId || role.managed || role.position >= top) {
+          throw createError({ statusCode: 400, statusMessage: "Twitch mapping selects a role MODUS cannot assign." });
+        }
+      }
+    }
+    body.settings = validated.settings;
+  }
 
   const isWelcome = moduleName.toLowerCase() === "welcome";
   if (isWelcome && body?.settings?.elements !== undefined) {

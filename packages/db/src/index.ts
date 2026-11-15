@@ -32,3 +32,5 @@ export * from "./repositories/starboard-posts";
 export * from "./rank-cards";
 export * from "./repositories/applications";
 export * from "./application-reviewers";
+
+export * from "./twitch-sync";

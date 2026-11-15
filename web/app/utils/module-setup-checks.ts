@@ -8,6 +8,12 @@ type Settings = Record<string, any>;
 type Rule = (s: Settings) => string[];
 
 const RULES: Record<string, Rule> = {
+  "twitch-sync": (s) => {
+    const out: string[] = [];
+    if (!s.channelLogin) out.push("Twitch Role Sync has no Twitch channel username");
+    if (!Object.values(s.mappings || {}).some(Boolean)) out.push("Twitch Role Sync has no role mappings");
+    return out;
+  },
   welcome: (s) => (s.channelId ? [] : ["Welcome is on but has no channel selected"]),
   logging: (s) => (s.auditChannelId ? [] : ["Audit Logging is on but has no log channel"]),
   tickets: (s) => {
