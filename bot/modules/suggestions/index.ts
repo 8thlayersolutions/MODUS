@@ -492,6 +492,7 @@ async function reviewFromCommand(
       const posts = allSuggestionPosts(row);
       if (!posts.length) throw new Error("suggestion has no posted message yet");
       let updated = 0;
+      let missing = 0;
       for (const post of posts) {
         try {
           const channel = await guildChannel(guild, post.channelId);
@@ -500,7 +501,9 @@ async function reviewFromCommand(
           await channel.messages.edit(post.messageId, payload);
           updated++;
         } catch (error) {
-          if (!isUnknownMessage(error)) {
+          if (isUnknownMessage(error) || isChannelNotInGuild(error)) {
+            missing++;
+          } else {
             void moduleManager.logger.warn(
               `Could not sync review to ${post.messageId}: ${errMessage(error)}`,
               guild.id, MODULE,
@@ -508,7 +511,7 @@ async function reviewFromCommand(
           }
         }
       }
-      return updated ? "ok" : "missing";
+      return updated ? "ok" : missing === posts.length ? "missing" : "ok";
     },
     postThreadNote: async (row, content) => {
       for (const post of allSuggestionPosts(row)) {
