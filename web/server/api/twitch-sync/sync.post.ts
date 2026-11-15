@@ -81,12 +81,13 @@ export default defineEventHandler(async event => {
         );
       }
       const connection = await discordTwitchConnection(discordTokens.accessToken);
-      // A changed connection may be a takeover/relink scenario. Require explicit relinking.
-      if (connection && connection.id !== link.twitchId) { failed++; continue; }
-
+      // A changed, verified Discord Twitch connection invalidates channel-specific
+      // entitlements from the formerly linked Twitch ID. Keep only the generic
+      // Connected entitlement until the member explicitly re-authorizes.
+      const changedConnection = !!connection && connection.id !== link.twitchId;
       const statuses = new Set<string>();
-      if (connection) {
-        statuses.add("connected");
+      if (connection) statuses.add("connected");
+      if (connection && !changedConnection) {
         if (connection.id === broadcaster.twitchId) statuses.add("broadcaster");
         if (editorIds.has(connection.id)) statuses.add("editor");
         // All four endpoint responses must succeed. A Twitch HTTP error is NOT a negative role check.
