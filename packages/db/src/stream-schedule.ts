@@ -355,13 +355,13 @@ export function buildDiscordStreamMessage(
     });
     return {
       name: DAY_NAMES[day.weekday] + " • " + day.date,
-      value: clipDiscord(lines.length ? lines.join("\n") : "No stream scheduled", 650),
+      value: clipDiscord(lines.length ? lines.join("\n") : "No stream scheduled", 560),
       inline: config.inlineFields,
     };
   });
   const embed: DiscordStreamEmbed = {
     title: clipDiscord(config.title || settings.title || "Stream Schedule", 256),
-    description: clipDiscord(description, 1100),
+    description: clipDiscord(description, 650),
     color: parseInt(config.color.slice(1), 16),
     fields,
   };
