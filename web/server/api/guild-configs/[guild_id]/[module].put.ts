@@ -68,8 +68,8 @@ export default defineEventHandler(async (event) => {
       let member: { roles: string[] };
       try {
         [roles, member] = await Promise.all([
-          $fetch(`https://discord.com/api/v10/guilds/${guildId}/roles`, { headers }),
-          $fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${botId}`, { headers }),
+          $fetch<Array<{ id: string; managed: boolean; position: number }>>(`https://discord.com/api/v10/guilds/${guildId}/roles`, { headers }),
+          $fetch<{ roles: string[] }>(`https://discord.com/api/v10/guilds/${guildId}/members/${botId}`, { headers }),
         ]);
       } catch {
         throw createError({ statusCode: 503, statusMessage: "Unable to check the bot's role hierarchy." });

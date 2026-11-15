@@ -37,3 +37,5 @@ export * from "./application-reviewers";
 export * from "./twitch-sync";
 
 export * from "./staff-list";
+
+export * from "./repositories/twitch-sync";

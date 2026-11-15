@@ -34,6 +34,7 @@ import {
   SuggestionRepository,
   SuggestionVoteRepository,
   ApplicationRepository,
+  TwitchSyncRepository,
   type Database,
 } from "@modus/db";
 
@@ -66,6 +67,7 @@ export interface Repos {
   suggestions: SuggestionRepository;
   suggestionVotes: SuggestionVoteRepository;
   applications: ApplicationRepository;
+  twitchSync: TwitchSyncRepository;
 }
 
 let cached: Repos | null = null;
@@ -108,6 +110,7 @@ export function getRepos(): Repos | null {
       suggestions: new SuggestionRepository(db),
       suggestionVotes: new SuggestionVoteRepository(db),
       applications: new ApplicationRepository(db),
+      twitchSync: new TwitchSyncRepository(db),
     };
     return cached;
   } catch (err) {

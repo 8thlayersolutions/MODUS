@@ -51,6 +51,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 500, statusMessage: "Bot token not configured on server." });
   }
 
+  const headers = { Authorization: `Bot ${botToken}`, "Content-Type": "application/json" };
   const settings = await repos.guildConfigs.getModuleSettings(guildId, "suggestions");
   const closeVotingOnDecision = settings.closeVotingOnDecision !== false;
 
@@ -83,7 +84,7 @@ export default defineEventHandler(async (event) => {
       votingLocked: isVotingLocked(updated.status as SuggestionStatus, closeVotingOnDecision),
       createdAtMs: updated.createdAt.getTime(),
     });
-    const headers = { Authorization: `Bot ${botToken}`, "Content-Type": "application/json" };
+
     // PATCH carries embeds + components only (no `content`).
     for (const post of posts) {
       const editMessage = () =>
