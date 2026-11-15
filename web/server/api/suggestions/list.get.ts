@@ -108,6 +108,7 @@ export default defineEventHandler(async (event) => {
       channelId: r.channelId,
       messageId: r.messageId,
       threadId: r.threadId,
+      posts: r.posts,
       createdAt: r.createdAt,
       up: tallies.get(r.id)?.up ?? 0,
       down: tallies.get(r.id)?.down ?? 0,
