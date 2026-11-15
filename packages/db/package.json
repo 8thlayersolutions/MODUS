@@ -38,6 +38,10 @@
       "types": "./src/recording-limits.ts",
       "default": "./dist/recording-limits.js"
     },
+    "./stream-schedule": {
+      "types": "./src/stream-schedule.ts",
+      "default": "./dist/stream-schedule.js"
+    },
     "./repositories/recordings": {
       "types": "./src/repositories/recordings.ts",
       "default": "./dist/repositories/recordings.js"

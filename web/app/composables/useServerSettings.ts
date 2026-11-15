@@ -117,6 +117,7 @@ export function useServerSettings(guildId: string) {
     "applications",
     "staff-list",
     "events",
+    "stream-schedule",
     "polls",
     "giveaways",
     "embeds",
