@@ -38,6 +38,7 @@ COPY bot/patches ./bot/patches
 COPY packages/db/tsconfig.json ./packages/db/
 COPY packages/db/src ./packages/db/src
 COPY packages/db/migrations ./packages/db/migrations
+COPY packages/db/drizzle ./packages/db/drizzle
 
 # Install ALL workspace dependencies with the frozen root lockfile. Scripts stay
 # enabled so native voice packages (@discordjs/opus, sodium-native) build their
@@ -72,8 +73,12 @@ WORKDIR /app
 COPY --from=builder /deploy/bot ./
 # The runner runs compiled code from @modus/db; SQL files must also be present.
 COPY --from=builder /repo/packages/db/migrations ./db-migrations
+COPY --from=builder /repo/packages/db/drizzle ./db-drizzle
 ENV MODUS_MIGRATIONS_DIR=/app/db-migrations
-RUN test -f /app/db-migrations/0005_suggestion_multiple_channels.sql
+ENV MODUS_DRIZZLE_DIR=/app/db-drizzle
+RUN test -f /app/db-migrations/0005_suggestion_multiple_channels.sql \
+    && test -f /app/db-drizzle/meta/_journal.json \
+    && test -f /app/db-drizzle/0022_suggestions_multi_channel_posts.sql
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD node -e "const http = require('http'); http.get('http://localhost:' + (process.env.BOT_PORT || 3000), (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
