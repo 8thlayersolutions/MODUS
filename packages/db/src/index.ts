@@ -1,5 +1,6 @@
 export * from "./schema";
 export * from "./client";
+export * from "./migrations";
 export * from "./repositories/recordings";
 export * from "./repositories/guild-configs";
 export * from "./repositories/servers";
