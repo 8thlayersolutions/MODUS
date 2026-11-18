@@ -16,7 +16,9 @@ export default defineEventHandler(async (event) => {
   if (!/^\d{17,22}$/.test(guild) || !botToken) {
     throw createError({ statusCode: 503, statusMessage: "CHAOS HQ Discord integration is not configured." });
   }
-  const configured = /^\d{17,22}$/.test(whitelistRoleId) && /^\d{17,22}$/.test(verifiedRoleId);
+  const whitelistConfigured = /^\d{17,22}$/.test(whitelistRoleId);
+  const verifiedConfigured = /^\d{17,22}$/.test(verifiedRoleId);
+  const configured = whitelistConfigured && verifiedConfigured;
   let data: { roles?: string[]; pending?: boolean; nick?: string | null } | null = null;
   try {
     data = await $fetch("https://discord.com/api/v10/guilds/" + guild + "/members/" + identity.userId, {
@@ -35,9 +37,10 @@ export default defineEventHandler(async (event) => {
     inGuild: isMember,
     roleConfigurationReady: configured,
     // These are Discord roles, not the in-game Minecraft whitelist.
-    hasWhitelistRole: configured && roles.includes(whitelistRoleId),
-    hasVerifiedRole: configured && roles.includes(verifiedRoleId),
-    canViewMemberResources: configured && (roles.includes(verifiedRoleId) || roles.includes(whitelistRoleId)),
+    hasWhitelistRole: whitelistConfigured && roles.includes(whitelistRoleId),
+    hasVerifiedRole: verifiedConfigured && roles.includes(verifiedRoleId),
+    canViewMemberResources: (whitelistConfigured && roles.includes(whitelistRoleId)) ||
+      (verifiedConfigured && roles.includes(verifiedRoleId)),
     discordDisplayName: isMember ? data?.nick || identity.actorDisplay : identity.actorDisplay,
     checkedAt: new Date().toISOString(),
   };
