@@ -81,6 +81,14 @@ export default defineNuxtConfig({
   css: ["~/assets/css/main.css", "~/assets/css/discord-md.css"],
   runtimeConfig: {
     discordBotToken: "", // Set via NUXT_DISCORD_BOT_TOKEN
+    // ── CHAOS SMP member dashboard ──────────────────────────────────────
+    // Java status uses a TCP handshake, with DNS SRV support.
+    chaosSmpHost: "chaos.mc.anxietyscout.live", // NUXT_CHAOS_SMP_HOST
+    chaosSmpPort: "25565", // NUXT_CHAOS_SMP_PORT
+    // Required for authenticated Discord SMP member role checks.
+    chaosSmpGuildId: "", // NUXT_CHAOS_SMP_GUILD_ID
+    chaosSmpWhitelistRoleId: "", // NUXT_CHAOS_SMP_WHITELIST_ROLE_ID
+    chaosSmpVerifiedRoleId: "", // NUXT_CHAOS_SMP_VERIFIED_ROLE_ID
     renderApiKey: "", // Shared secret for bot→dashboard render API — Set via NUXT_RENDER_API_KEY
     // ── Discord OAuth (nuxt-auth-utils) ───────────────────────────────────
     // /api/auth/discord + /api/auth/callback run the OAuth flow directly;
@@ -140,6 +148,7 @@ export default defineNuxtConfig({
     "/dashboard/**": { ssr: false },
     // Support transcripts are shared by link only — never index them.
     "/ticket/**": { robots: false },
+    "/minecraft/**": { robots: false },
   },
   future: {
     compatibilityVersion: 4,
