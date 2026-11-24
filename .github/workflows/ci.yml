@@ -349,7 +349,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/modus-web
+          images: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/modus-web
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/vortiq-web
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
