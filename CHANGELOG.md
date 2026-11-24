@@ -1,5 +1,52 @@
 # Changelog
 
+## [1.40.0](https://github.com/8thlayersolutions/MODUS/compare/modus-v1.39.0...modus-v1.40.0) (2026-11-24)
+
+
+### ✨ Features
+
+* **audit:** record Minecraft dashboard guild visibility changes ([09229d2](https://github.com/8thlayersolutions/MODUS/commit/09229d21138ad1a6f29b759f46dd9df52ab1608b))
+* **audit:** record Minecraft dashboard guild visibility changes ([bd14e82](https://github.com/8thlayersolutions/MODUS/commit/bd14e824a066e7a279c931ffbc252a0fe38f46e4))
+* **audit:** record Minecraft dashboard guild visibility changes ([41658b2](https://github.com/8thlayersolutions/MODUS/commit/41658b243a653a0c11f2657c93a227444321d67b))
+* **stream-schedule:** configurable Discord embed with automatic updates ([a088945](https://github.com/8thlayersolutions/MODUS/commit/a08894583536fec908376011c3a2e162d46dfc03))
+* **web:** add Chaos SMP Minecraft member dashboard with live status ([cd577d9](https://github.com/8thlayersolutions/MODUS/commit/cd577d9919a5b9fd1f6e92770b02ffeeff8f57a6))
+* **web:** add safe, cached Minecraft Java status probe with SRV support ([fad2827](https://github.com/8thlayersolutions/MODUS/commit/fad2827f193c17a058c840cd1657a28f22885132))
+* **web:** audited admin-only Minecraft dashboard allowlist update ([34b13b7](https://github.com/8thlayersolutions/MODUS/commit/34b13b7c640584a9afaf02dd082db9e34a962ec3))
+* **web:** bot admin UI for Minecraft guild ID allowlist and global toggle ([f4ba7a9](https://github.com/8thlayersolutions/MODUS/commit/f4ba7a9220f56187e55e76e316881dcc65f2fa1a))
+* **web:** configure Minecraft status and Discord role settings ([2146137](https://github.com/8thlayersolutions/MODUS/commit/21461379f947e18140f5b19963ae95b9f7947fa5))
+* **web:** create authenticated Chaos SMP member dashboard with live stats ([26eb772](https://github.com/8thlayersolutions/MODUS/commit/26eb7723be4f50868bcd55a11d9b9ac1928c185f))
+* **web:** drive Minecraft server sidebar link from admin guild allowlist ([5f9c338](https://github.com/8thlayersolutions/MODUS/commit/5f9c3382da86d470b51de99544172d4dbb474db8))
+* **web:** expose cached public Chaos SMP server status ([77aab81](https://github.com/8thlayersolutions/MODUS/commit/77aab81b39ccc14e8aabe20902b3e09ee40a4c14))
+* **web:** Minecraft Dashboard guild allowlist in Bot Admin and VORTIQ navigation ([43a5756](https://github.com/8thlayersolutions/MODUS/commit/43a5756aa674127e7f38f06e521e688d9a7319ee))
+* **web:** persisted, validated Minecraft guild visibility configuration ([66a75b1](https://github.com/8thlayersolutions/MODUS/commit/66a75b1e1b4d07be23cdaf42a46dd3412c0ac990))
+* **web:** read admin-only Minecraft dashboard guild allowlist ([2fa958a](https://github.com/8thlayersolutions/MODUS/commit/2fa958af50cc8fd835dac7cbd7197a81760e2c02))
+* **web:** server-derived Minecraft dashboard visibility per guild ([c0b78d3](https://github.com/8thlayersolutions/MODUS/commit/c0b78d33afea77df98cbee787b8b83f1f1e5dab9))
+* **web:** verify Minecraft member roles using the caller's Discord session ([956398b](https://github.com/8thlayersolutions/MODUS/commit/956398bce758892988a9f3034c228dd77380e1d6))
+
+
+### 🐛 Bug Fixes
+
+* **ci:** publish versioned VORTIQ web compatibility images ([0e5e7f9](https://github.com/8thlayersolutions/MODUS/commit/0e5e7f911524f0c206789c201554a79dd6213fdb))
+* **ci:** publish VORTIQ web compatibility image alongside MODUS web ([33cf2c4](https://github.com/8thlayersolutions/MODUS/commit/33cf2c45386709e56f3d2f30299a55c9428499bd))
+* **web:** enforce Minecraft guild allowlist on private role verification ([ffd6bd6](https://github.com/8thlayersolutions/MODUS/commit/ffd6bd69e2586aee210fe38c49352776893c1808))
+* **web:** evaluate each configured SMP role independently ([8308cdd](https://github.com/8thlayersolutions/MODUS/commit/8308cdde25c3db20203f77cfc9733287ed1028bf))
+* **web:** expose Chaos SMP dashboard in CHAOS HQ server navigation ([f11e6d3](https://github.com/8thlayersolutions/MODUS/commit/f11e6d3b184cee8289c459ec7616f3b4dffbd68f))
+* **web:** parse Discord IDs and newlines correctly in admin editor ([909e337](https://github.com/8thlayersolutions/MODUS/commit/909e337fa8bad80e85bf911ec346c571264d4c56))
+* **web:** scope Minecraft navigation to public CHAOS HQ guild ID ([f36f717](https://github.com/8thlayersolutions/MODUS/commit/f36f717e4a79a7277ead1764387b8ba4eba09d40))
+
+
+### ♻️ Refactors
+
+* **web:** replace static Minecraft guild env with admin-managed allowlist ([7c9bfe3](https://github.com/8thlayersolutions/MODUS/commit/7c9bfe3011acc71106b4760da156cdc0b9a74f29))
+
+
+### 📖 Documentation
+
+* clarify Minecraft menu and Docker image naming mismatch ([f13fa1d](https://github.com/8thlayersolutions/MODUS/commit/f13fa1d0ebc84e889091aeaabeb423250e2a98c5))
+* **web:** configure guild-specific Minecraft visibility from Bot Admin ([4b3dffd](https://github.com/8thlayersolutions/MODUS/commit/4b3dffdc5cc1fee23b6ee83245da16b05c1f0635))
+* **web:** document Chaos SMP environment variables ([f9eb4b5](https://github.com/8thlayersolutions/MODUS/commit/f9eb4b53e64a22e89f735f85c317b72e85e324d2))
+* **web:** document Chaos SMP member dashboard deployment and security ([057c543](https://github.com/8thlayersolutions/MODUS/commit/057c54351d68dbfe4e4b2d3bf2376969c3920878))
+
 ## [1.39.0](https://github.com/8thlayersolutions/MODUS/compare/modus-v1.38.0...modus-v1.39.0) (2026-11-15)
 
 
