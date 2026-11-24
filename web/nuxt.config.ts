@@ -133,9 +133,6 @@ export default defineNuxtConfig({
     // return 503 rather than silently degrading.
     databaseUrl: "", // Set via NUXT_DATABASE_URL
     public: {
-      // Non-secret guild identifier used to show the Minecraft shortcut
-      // only for the CHAOS HQ server in VORTIQ's management sidebar.
-      chaosSmpGuildId: "978327073196232704", // NUXT_PUBLIC_CHAOS_SMP_GUILD_ID
       baseUrl: "https://modusbot.io", // Public origin (also used for webhook trigger URLs) — Set via NUXT_PUBLIC_BASE_URL
       botAdminIds: "", // Comma-separated Discord IDs, set via NUXT_PUBLIC_BOT_ADMIN_IDS
       botUrl: "", // Bot health check URL, set via NUXT_PUBLIC_BOT_URL
