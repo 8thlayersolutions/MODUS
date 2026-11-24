@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { sanitizeAuditState } from "./admin-audit/redaction";
+import { requiresReason } from "./admin-audit/policy";
 import {
   DEFAULT_MINECRAFT_GUILD_ID,
   minecraftVisibleInGuild,
@@ -49,6 +51,13 @@ describe("Minecraft dashboard guild visibility settings", () => {
       enabled: true,
       allowedGuildIds: Array.from({ length: 51 }, () => DEFAULT_MINECRAFT_GUILD_ID),
     })).toThrow();
+  });
+
+  it("requires an audit reason and records only safe guild visibility state", () => {
+    const before = { enabled: true, allowedGuildIds: [DEFAULT_MINECRAFT_GUILD_ID] };
+    const after = { enabled: true, allowedGuildIds: [GUILD_2] };
+    expect(requiresReason("minecraft.updated", before, after)).toBe(true);
+    expect(sanitizeAuditState("minecraft", after)).toEqual(after);
   });
 
   it("reads persisted global config instead of substituting the default", async () => {
