@@ -219,11 +219,11 @@ const minecraftGuildText = ref("");
 const minecraftReason = ref("");
 const savedMinecraft = ref<MinecraftVisibility | null>(null);
 
-const minecraftRawIds = computed(() => minecraftGuildText.value.split(/[\\s,]+/).map((id) => id.trim()).filter(Boolean));
+const minecraftRawIds = computed(() => minecraftGuildText.value.split(/[\s,]+/).map((id) => id.trim()).filter(Boolean));
 const minecraftParsedIds = computed(() => [...new Set(minecraftRawIds.value)]);
 const minecraftValidationError = computed(() => {
   if (minecraftRawIds.value.length > 50) return "Maximum 50 Discord Guild IDs.";
-  if (minecraftRawIds.value.some((id) => !/^\\d{17,22}$/.test(id))) {
+  if (minecraftRawIds.value.some((id) => !/^\d{17,22}$/.test(id))) {
     return "Each Guild ID must contain 17–22 digits (numbers only).";
   }
   return "";
@@ -241,7 +241,7 @@ const fetchMinecraftVisibility = async () => {
   try {
     const config = await $fetch<MinecraftVisibility>("/api/admin/minecraft-dashboard");
     minecraftEnabled.value = config.enabled;
-    minecraftGuildText.value = config.allowedGuildIds.join("\\n");
+    minecraftGuildText.value = config.allowedGuildIds.join("\n");
     savedMinecraft.value = config;
     minecraftLoaded.value = true;
     minecraftReason.value = "";
