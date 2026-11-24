@@ -10,6 +10,8 @@ export function requiresReason(
   after: AuditState,
 ): boolean {
   if (action === 'module.disabled' || action === 'music.disabled') return true
+  // Every edit to the Minecraft guild allowlist must include an audit reason.
+  if (isAction(action, 'minecraft')) return true
 
   if (isAction(action, 'module')) {
     return before.enabled === true && after.enabled === false

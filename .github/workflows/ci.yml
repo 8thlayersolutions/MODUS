@@ -313,7 +313,7 @@ jobs:
       
       - name: Test Chaos SMP Minecraft protocol
         working-directory: web
-        run: pnpm exec vitest run server/utils/chaos-smp.test.ts
+        run: pnpm exec vitest run server/utils/chaos-smp.test.ts server/utils/minecraft-dashboard-visibility.test.ts
 
   # ── Build Web Image (only if web/** changed, gated on typecheck-web) ──────
   # Excludes automated release commits from Release Please to avoid duplicate
@@ -349,7 +349,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/modus-web
+          images: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/modus-web
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/vortiq-web
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch

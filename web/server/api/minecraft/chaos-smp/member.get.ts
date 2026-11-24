@@ -1,4 +1,6 @@
 import { requireAuthedUserId } from "../../../utils/session";
+import { getRepos } from "../../../utils/db";
+import { minecraftVisibleInGuild, readMinecraftDashboardVisibility } from "../../../utils/minecraft-dashboard-visibility";
 
 /**
  * Signed-in Discord member details for the configured Chaos SMP guild only.
@@ -11,6 +13,14 @@ export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig();
   const guild = String(config.chaosSmpGuildId || "");
   const botToken = String(config.discordBotToken || "");
+  // Protect the private role lookup with the same persisted global gate used
+  // for dashboard navigation. Public Minecraft server status remains public.
+  const repos = getRepos();
+  if (!repos) throw createError({ statusCode: 503, statusMessage: "Database unavailable." });
+  const visibility = await readMinecraftDashboardVisibility(repos);
+  if (!minecraftVisibleInGuild(visibility, guild)) {
+    throw createError({ statusCode: 403, statusMessage: "Minecraft dashboard is not enabled for this guild." });
+  }
   const whitelistRoleId = String(config.chaosSmpWhitelistRoleId || "");
   const verifiedRoleId = String(config.chaosSmpVerifiedRoleId || "");
   if (!/^\d{17,22}$/.test(guild) || !botToken) {

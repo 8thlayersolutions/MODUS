@@ -57,6 +57,14 @@ const { state: chrome } = usePageChrome();
 
 const basePath = `/dashboard/server/${guildId}`;
 
+// Read the allowlist from the server. Fail closed if the request fails or
+// the guild is no longer included in the bot admin's Minecraft settings.
+const { data: minecraftVisibility } = useFetch<{ visible: boolean }>(
+  "/api/minecraft/chaos-smp/visibility",
+  { query: { guild_id: guildId }, server: false, default: () => ({ visible: false }) },
+);
+const showMinecraftDashboard = computed(() => minecraftVisibility.value?.visible === true);
+
 const activeTab = computed(() => {
   const path = route.path;
   if (path.endsWith("/overview")) return "overview";
@@ -167,7 +175,16 @@ const sidebarTabs = computed(() => {
     icon: "i-lucide-layout-dashboard",
     to: `${basePath}/overview`,
   };
-  return [overviewTab, ...staticTabs, ...moduleTabs];
+  const communityTabs = showMinecraftDashboard.value
+    ? [{
+        id: "chaos-smp",
+        label: "Minecraft Dashboard",
+        icon: "i-lucide-pickaxe",
+        to: "/minecraft/chaos-smp",
+        groupLabel: "Community tools",
+      }]
+    : [];
+  return [overviewTab, ...communityTabs, ...staticTabs, ...moduleTabs];
 });
 
 // Register sidebar once guild + module data have both loaded — registering

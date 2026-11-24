@@ -7,6 +7,76 @@
       description="Enable or disable modules globally for all servers. Server-specific settings can still override these if the module is enabled here."
     />
 
+    <!-- CHAOS SMP is a web dashboard feature, not a Discord bot module. -->
+    <section class="glide-tile rounded-2xl border border-purple-500/15 p-6 space-y-5" aria-labelledby="minecraft-visibility-heading">
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="flex min-w-0 items-start gap-3">
+          <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-purple-500/15 text-purple-200">
+            <UIcon name="i-lucide-pickaxe" class="h-5 w-5" />
+          </span>
+          <div>
+            <h2 id="minecraft-visibility-heading" class="text-base font-bold text-white">
+              Minecraft Dashboard — Guild Visibility
+            </h2>
+            <p class="mt-1 max-w-2xl text-sm leading-6 text-gray-400">
+              Show the CHAOS SMP dashboard in only the Discord server dashboards
+              listed below. This does not enable a Minecraft bot module in other servers.
+            </p>
+          </div>
+        </div>
+        <USwitch
+          v-model="minecraftEnabled"
+          :disabled="minecraftLoading || !minecraftLoaded || minecraftSaving"
+          aria-label="Enable Minecraft dashboard navigation"
+        />
+      </div>
+      <div v-if="minecraftLoading" class="text-sm text-gray-400">Loading guild settings…</div>
+      <div v-else-if="!minecraftLoaded" class="space-y-2">
+        <p class="text-sm text-amber-300">Could not load saved guild settings. Editing is disabled.</p>
+        <UButton size="sm" variant="soft" @click="fetchMinecraftVisibility">Retry</UButton>
+      </div>
+      <template v-else>
+        <UFormField label="Allowed Discord Guild IDs" hint="One per line, or separated by commas/spaces. Maximum 50.">
+          <UTextarea
+            v-model="minecraftGuildText"
+            :rows="4"
+            class="w-full font-mono"
+            placeholder="978327073196232704"
+            :disabled="minecraftSaving"
+          />
+        </UFormField>
+        <p v-if="minecraftValidationError" class="text-xs text-rose-300" role="alert">
+          {{ minecraftValidationError }}
+        </p>
+        <p v-else class="text-xs text-gray-400">
+          {{ minecraftParsedIds.length }} guild{{ minecraftParsedIds.length === 1 ? '' : 's' }} allowed.
+          An empty list hides the dashboard everywhere.
+        </p>
+        <UFormField label="Reason for changing visibility" hint="Required; recorded in the bot administration audit trail.">
+          <UInput
+            v-model="minecraftReason"
+            class="w-full"
+            placeholder="e.g. Limit the Minecraft portal to CHAOS HQ"
+            :disabled="minecraftSaving"
+          />
+        </UFormField>
+        <div class="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4">
+          <p class="max-w-xl text-xs leading-5 text-gray-400">
+            Only approved guild dashboards show the link. Private Discord role data
+            is checked server-side; public Minecraft server statistics remain public.
+          </p>
+          <UButton
+            icon="i-lucide-save"
+            :loading="minecraftSaving"
+            :disabled="!minecraftDirty || Boolean(minecraftValidationError) || !minecraftReason.trim() || minecraftSaving"
+            @click="saveMinecraftVisibility"
+          >
+            Save Minecraft Guild Access
+          </UButton>
+        </div>
+      </template>
+    </section>
+
     <!-- Loading -->
     <div v-if="modulesLoading" class="flex justify-center py-12">
       <UIcon
@@ -137,6 +207,79 @@ import type { ModuleDoc } from "@modus/db";
 import { getModuleDisplay } from "~/utils/module-metadata";
 
 const toast = useToast();
+interface MinecraftVisibility {
+  enabled: boolean;
+  allowedGuildIds: string[];
+}
+const minecraftLoading = ref(false);
+const minecraftLoaded = ref(false);
+const minecraftSaving = ref(false);
+const minecraftEnabled = ref(true);
+const minecraftGuildText = ref("");
+const minecraftReason = ref("");
+const savedMinecraft = ref<MinecraftVisibility | null>(null);
+
+const minecraftRawIds = computed(() => minecraftGuildText.value.split(/[\s,]+/).map((id) => id.trim()).filter(Boolean));
+const minecraftParsedIds = computed(() => [...new Set(minecraftRawIds.value)]);
+const minecraftValidationError = computed(() => {
+  if (minecraftRawIds.value.length > 50) return "Maximum 50 Discord Guild IDs.";
+  if (minecraftRawIds.value.some((id) => !/^\d{17,22}$/.test(id))) {
+    return "Each Guild ID must contain 17–22 digits (numbers only).";
+  }
+  return "";
+});
+const minecraftDirty = computed(() => {
+  const prev = savedMinecraft.value;
+  if (!prev) return false;
+  return prev.enabled !== minecraftEnabled.value ||
+    JSON.stringify([...prev.allowedGuildIds].sort()) !== JSON.stringify([...minecraftParsedIds.value].sort());
+});
+
+const fetchMinecraftVisibility = async () => {
+  minecraftLoading.value = true;
+  minecraftLoaded.value = false;
+  try {
+    const config = await $fetch<MinecraftVisibility>("/api/admin/minecraft-dashboard");
+    minecraftEnabled.value = config.enabled;
+    minecraftGuildText.value = config.allowedGuildIds.join("\n");
+    savedMinecraft.value = config;
+    minecraftLoaded.value = true;
+    minecraftReason.value = "";
+  } catch (error) {
+    console.error("Failed to read Minecraft guild settings:", error);
+    toast.add({ title: "Minecraft configuration unavailable", color: "error" });
+  } finally {
+    minecraftLoading.value = false;
+  }
+};
+
+const saveMinecraftVisibility = async () => {
+  if (!minecraftLoaded.value || !minecraftDirty.value ||
+      minecraftValidationError.value || !minecraftReason.value.trim()) return;
+  minecraftSaving.value = true;
+  try {
+    await $fetch("/api/admin/minecraft-dashboard", {
+      method: "PATCH",
+      body: {
+        enabled: minecraftEnabled.value,
+        allowedGuildIds: minecraftParsedIds.value,
+        reason: minecraftReason.value.trim(),
+      },
+    });
+    toast.add({
+      title: "Minecraft visibility saved",
+      description: "Allowed guilds will see the dashboard after refreshing their VORTIQ navigation.",
+      color: "success",
+    });
+    await fetchMinecraftVisibility();
+  } catch (error) {
+    console.error("Failed to save Minecraft guild settings:", error);
+    toast.add({ title: "Could not save Minecraft guild access", color: "error" });
+  } finally {
+    minecraftSaving.value = false;
+  }
+};
+
 
 const modulesLoading = ref(false);
 const modules = ref<ModuleDoc[]>([]);
@@ -216,5 +359,5 @@ const submitToggle = async () => {
   }
 };
 
-onMounted(() => fetchModules());
+onMounted(() => { void fetchModules(); void fetchMinecraftVisibility(); });
 </script>

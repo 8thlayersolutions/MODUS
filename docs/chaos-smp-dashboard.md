@@ -74,3 +74,54 @@ The integration does not read or edit the real Minecraft whitelist,
 link Minecraft UUIDs to Discord users, query player inventories, or
 control Minepanel/RCON. Those require a trusted Minecraft-side agent
 or documented host API and separately secured operations.
+
+## Finding the dashboard inside VORTIQ
+
+The CHAOS SMP portal is a website page, not a Discord bot module in the Modules grid.
+
+For CHAOS HQ server administrators: open the CHAOS HQ guild dashboard.
+The left context sidebar includes a Community tools group and a Minecraft Dashboard
+link only when the guild is on the administrator-managed allowlist.
+
+### Configure visible guilds in the VORTIQ admin panel
+
+Open Bot Admin > Global Modules > Minecraft Dashboard — Guild Visibility.
+Enable the option and enter each allowed Discord guild ID on a separate line
+(or separate them with commas). Enter a reason and select Save Minecraft
+Guild Access. IDs must contain 17–22 digits, with a maximum of 50.
+An empty allowlist shows the dashboard in no guild; disabling the switch
+also hides it everywhere.
+
+The configuration is stored in the existing PostgreSQL guild_configs table
+under (__global__, minecraft_dashboard_visibility). There is no schema
+migration and no environment variable to change for visibility.
+Before the first save, the existing CHAOS HQ guild (978327073196232704)
+is the sole allowed guild.
+
+The server-side visibility endpoint returns only a boolean and never the
+complete allowlist. Changing the allowlist affects guild navigation on
+refresh and also prevents the private Discord member-role API from serving
+the CHAOS HQ portal if that guild is no longer allowed.
+The public, read-only Minecraft Java status endpoint remains available
+for website embeds and does not return names or private member data.
+
+For regular Minecraft members: the WordPress Minecraft Dashboard links directly
+to https://vortiq.8thlayer.cloud/minecraft/chaos-smp . They do not need
+VORTIQ server-management permissions to use the standalone page.
+
+### Docker image compatibility
+
+The CI workflow historically published ghcr.io/8thlayersolutions/modus-web:latest
+but some Coolify deployments use ghcr.io/8thlayersolutions/vortiq-web:latest.
+The GitHub Actions workflow now publishes BOTH image names on main and release.
+They contain identical web code.
+
+After merge, wait for the main GitHub Actions build to finish, then redeploy
+the Coolify web service with a fresh image pull. A restart reusing an older
+image digest will not expose the new route or navigation.
+
+Validation:
+- Open /minecraft/chaos-smp directly.
+- Open /api/minecraft/chaos-smp/status and confirm a JSON status response.
+- Open the CHAOS HQ server dashboard and locate Community tools / Minecraft Dashboard.
+- If a direct 404 persists, check the actual running image name/digest in Coolify.

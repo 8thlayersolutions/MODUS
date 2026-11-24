@@ -3,7 +3,7 @@ import type { Database } from '@modus/db'
 
 export const AUDIT_REASON_MAX_LENGTH = 1000
 
-export type AuditResource = 'module' | 'music' | 'ai' | 'premium'
+export type AuditResource = 'module' | 'music' | 'ai' | 'premium' | 'minecraft'
 export type AuditState = Record<string, unknown>
 export type AuditTransaction = Parameters<Parameters<Database['transaction']>[0]>[0]
 
