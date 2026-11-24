@@ -1,6 +1,6 @@
 import type { AuditResource, AuditState } from './types'
 
-const SUPPORTED_RESOURCES = new Set<AuditResource>(['module', 'music', 'ai', 'premium'])
+const SUPPORTED_RESOURCES = new Set<AuditResource>(['module', 'music', 'ai', 'premium', 'minecraft'])
 const SENSITIVE_KEY = /(api.?key|token|secret|password|credential|access.?key|connection|string|authorization|cookie|(^|_)ip($|_))/i
 const SENSITIVE_URL_PARAMETER = /[?&](api.?key|token|secret|password|credential|access.?key)=/i
 const AI_PROVIDERS = new Set([
@@ -150,6 +150,14 @@ export function sanitizeAuditState(
       break
     case 'premium':
       allowed = typeof state.premium === 'boolean' ? { premium: state.premium } : {}
+      break
+    case 'minecraft':
+      allowed = {
+        enabled: state.enabled === true,
+        allowedGuildIds: Array.isArray(state.allowedGuildIds)
+          ? state.allowedGuildIds.filter((id): id is string => typeof id === 'string' && /^\d{17,22}$/.test(id)).slice(0, 50)
+          : [],
+      }
       break
     case 'ai': {
       allowed = {}
