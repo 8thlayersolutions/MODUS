@@ -310,6 +310,10 @@ jobs:
           fi
 
           echo "No runtime-fatal type errors. Pre-existing type errors: ${total:-0}"
+      
+      - name: Test Chaos SMP Minecraft protocol
+        working-directory: web
+        run: pnpm exec vitest run server/utils/chaos-smp.test.ts
 
   # ── Build Web Image (only if web/** changed, gated on typecheck-web) ──────
   # Excludes automated release commits from Release Please to avoid duplicate
