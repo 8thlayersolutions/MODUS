@@ -313,7 +313,7 @@ jobs:
       
       - name: Test Chaos SMP Minecraft protocol
         working-directory: web
-        run: pnpm exec vitest run server/utils/chaos-smp.test.ts
+        run: pnpm exec vitest run server/utils/chaos-smp.test.ts server/utils/minecraft-dashboard-visibility.test.ts
 
   # ── Build Web Image (only if web/** changed, gated on typecheck-web) ──────
   # Excludes automated release commits from Release Please to avoid duplicate
