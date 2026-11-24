@@ -57,6 +57,11 @@ const { state: chrome } = usePageChrome();
 
 const basePath = `/dashboard/server/${guildId}`;
 
+// Display the CHAOS SMP member portal only in the designated CHAOS HQ guild,
+// not as an unrelated module in every VORTIQ customer's server.
+const chaosSmpGuildId = String(useRuntimeConfig().public.chaosSmpGuildId || "");
+const isChaosSmpGuild = computed(() => Boolean(chaosSmpGuildId) && guildId === chaosSmpGuildId);
+
 const activeTab = computed(() => {
   const path = route.path;
   if (path.endsWith("/overview")) return "overview";
@@ -167,7 +172,16 @@ const sidebarTabs = computed(() => {
     icon: "i-lucide-layout-dashboard",
     to: `${basePath}/overview`,
   };
-  return [overviewTab, ...staticTabs, ...moduleTabs];
+  const communityTabs = isChaosSmpGuild.value
+    ? [{
+        id: "chaos-smp",
+        label: "Minecraft Dashboard",
+        icon: "i-lucide-pickaxe",
+        to: "/minecraft/chaos-smp",
+        groupLabel: "Community tools",
+      }]
+    : [];
+  return [overviewTab, ...communityTabs, ...staticTabs, ...moduleTabs];
 });
 
 // Register sidebar once guild + module data have both loaded — registering
