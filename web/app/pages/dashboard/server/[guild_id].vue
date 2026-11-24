@@ -57,10 +57,13 @@ const { state: chrome } = usePageChrome();
 
 const basePath = `/dashboard/server/${guildId}`;
 
-// Display the CHAOS SMP member portal only in the designated CHAOS HQ guild,
-// not as an unrelated module in every VORTIQ customer's server.
-const chaosSmpGuildId = String(useRuntimeConfig().public.chaosSmpGuildId || "");
-const isChaosSmpGuild = computed(() => Boolean(chaosSmpGuildId) && guildId === chaosSmpGuildId);
+// Read the allowlist from the server. Fail closed if the request fails or
+// the guild is no longer included in the bot admin's Minecraft settings.
+const { data: minecraftVisibility } = useFetch<{ visible: boolean }>(
+  "/api/minecraft/chaos-smp/visibility",
+  { query: { guild_id: guildId }, server: false, default: () => ({ visible: false }) },
+);
+const showMinecraftDashboard = computed(() => minecraftVisibility.value?.visible === true);
 
 const activeTab = computed(() => {
   const path = route.path;
@@ -172,7 +175,7 @@ const sidebarTabs = computed(() => {
     icon: "i-lucide-layout-dashboard",
     to: `${basePath}/overview`,
   };
-  const communityTabs = isChaosSmpGuild.value
+  const communityTabs = showMinecraftDashboard.value
     ? [{
         id: "chaos-smp",
         label: "Minecraft Dashboard",
